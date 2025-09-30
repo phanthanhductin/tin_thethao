@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API_BASE = "http://127.0.0.1:8000"; // Laravel API
+const API_BASE = "http://127.0.0.1:8000/api"; // ✅ Laravel API (có /api)
 
 export default function Products() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const navigate = useNavigate(); // 👈 thêm dòng này
+  const [deletingId, setDeletingId] = useState(null); // ✅ khoá nút khi đang xoá
+  const navigate = useNavigate();
 
-  // Lấy sản phẩm từ API (admin)
+  // Lấy sản phẩm từ API (admin, cần Bearer token)
   useEffect(() => {
     const ac = new AbortController();
 
@@ -19,14 +20,23 @@ export default function Products() {
         setLoading(true);
         setErr("");
 
-        const res = await fetch(`${API_BASE}/admin/products`, { signal: ac.signal });
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_BASE}/admin/products`, {
+          signal: ac.signal,
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`, // ✅ bắt buộc cho auth:sanctum
+          },
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = await res.json();
+        // adminIndex trả về dạng paginate => data.data là mảng
         const list = Array.isArray(data) ? data : data.data ?? [];
         setItems(list);
       } catch (e) {
-        if (e.name !== "AbortError") setErr("Không tải được danh sách sản phẩm.");
+        if (e.name !== "AbortError")
+          setErr("Không tải được danh sách sản phẩm.");
       } finally {
         setLoading(false);
       }
@@ -35,13 +45,45 @@ export default function Products() {
     return () => ac.abort();
   }, []);
 
+  // Xoá sản phẩm (DELETE /admin/products/{id})
+  async function handleDelete(id) {
+    const token = localStorage.getItem("token");
+    if (!window.confirm("Bạn chắc chắn muốn xoá sản phẩm này?")) return;
+
+    try {
+      setDeletingId(id);
+
+      const res = await fetch(`${API_BASE}/admin/products/${id}`, {
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Xoá thất bại");
+      }
+
+      // Cập nhật UI
+      setItems((prev) => prev.filter((x) => x.id !== id));
+      alert("✅ Đã xoá sản phẩm");
+    } catch (err) {
+      console.error(err);
+      alert(`❌ Lỗi xoá: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // Filter theo tên hoặc slug
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return items;
     return items.filter(
       (x) =>
-        x.name.toLowerCase().includes(s) ||
+        x.name?.toLowerCase().includes(s) ||
         x.slug?.toLowerCase().includes(s)
     );
   }, [q, items]);
@@ -63,7 +105,7 @@ export default function Products() {
             }}
           />
           <button
-            onClick={() => navigate("/admin/products/add")} // 👈 sửa chỗ này
+            onClick={() => navigate("/admin/products/add")}
             style={{
               padding: "8px 12px",
               borderRadius: 8,
@@ -112,7 +154,7 @@ export default function Products() {
                   <td align="right">{p.qty}</td>
                   <td align="center">
                     <img
-                      src={p.thumbnail_url || `${API_BASE}/storage/${p.thumbnail}`}
+                      src={p.thumbnail_url /* do BE đã gắn sẵn thumbnail_url */}
                       alt={p.name}
                       style={{
                         width: 60,
@@ -120,11 +162,12 @@ export default function Products() {
                         objectFit: "cover",
                         borderRadius: 4,
                       }}
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
                     />
                   </td>
                   <td align="center">
                     <button
-                      onClick={() => alert("Edit " + p.id)}
+                      onClick={() => navigate(`/admin/products/edit/${p.id}`)}
                       style={{
                         padding: "4px 10px",
                         marginRight: 4,
@@ -138,17 +181,18 @@ export default function Products() {
                       Sửa
                     </button>
                     <button
-                      onClick={() => setItems(items.filter((x) => x.id !== p.id))}
+                      onClick={() => handleDelete(p.id)}
+                      disabled={deletingId === p.id}
                       style={{
                         padding: "4px 10px",
-                        background: "#c62828",
+                        background: deletingId === p.id ? "#ef9a9a" : "#c62828",
                         color: "#fff",
                         border: 0,
                         borderRadius: 6,
-                        cursor: "pointer",
+                        cursor: deletingId === p.id ? "not-allowed" : "pointer",
                       }}
                     >
-                      Xóa
+                      {deletingId === p.id ? "Đang xoá..." : "Xóa"}
                     </button>
                   </td>
                 </tr>

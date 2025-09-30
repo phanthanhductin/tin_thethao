@@ -6,14 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-
-// ★ ADDED
 use Illuminate\Support\Str;
 
 class ProductController extends Controller
 {
     // ===== helper (ADDED) =====
-    // ★ ADDED: Gắn URL ảnh public vào đối tượng
     private function withThumbUrl($p)
     {
         if (!$p) return $p;
@@ -21,7 +18,6 @@ class ProductController extends Controller
         return $p;
     }
 
-    // ★ ADDED: Bảo đảm slug là duy nhất (không thay đổi rule validate gốc của bạn)
     private function ensureUniqueSlug(string $slug, ?int $ignoreId = null): string
     {
         $base = Str::slug($slug);
@@ -40,7 +36,6 @@ class ProductController extends Controller
     }
 
     // ===== Public APIs =====
-    // Danh sách sản phẩm (có phân trang)
     public function index()
     {
         $products = Product::with('brand:id,name')
@@ -48,7 +43,6 @@ class ProductController extends Controller
             ->latest('id')
             ->paginate(12);
 
-        // ★ ADDED: gắn thumbnail_url cho từng item
         $products->getCollection()->transform(function ($p) {
             return $this->withThumbUrl($p);
         });
@@ -56,31 +50,21 @@ class ProductController extends Controller
         return $products->makeHidden(['brand','brand_id']);
     }
 
-    // Chi tiết sản phẩm
     public function show($id)
     {
         $p = Product::with('brand:id,name')
             ->select([
-                'id',
-                'name',
-                'brand_id',
-                'price_sale as price',
-                'thumbnail',
-                'detail',
-                'description',
-                'category_id',
+                'id','name','brand_id','price_sale as price',
+                'thumbnail','detail','description','category_id',
             ])
             ->find($id);
 
         if (!$p) return response()->json(['message' => 'Not found'], 404);
 
-        // ★ ADDED
         $p = $this->withThumbUrl($p);
-
         return $p->makeHidden(['brand','brand_id']);
     }
 
-    // Sản phẩm theo danh mục (có phân trang)
     public function byCategory($id)
     {
         $items = Product::with('brand:id,name')
@@ -89,7 +73,6 @@ class ProductController extends Controller
             ->latest('id')
             ->paginate(12);
 
-        // ★ ADDED
         $items->getCollection()->transform(function ($p) {
             return $this->withThumbUrl($p);
         });
@@ -98,24 +81,16 @@ class ProductController extends Controller
     }
 
     // ===== Admin APIs =====
-    // Admin - danh sách sản phẩm
     public function adminIndex()
     {
         $products = Product::with('brand:id,name')
             ->select([
-                'id',
-                'name',
-                'slug',
-                'brand_id',
-                'price_root',
-                'price_sale',
-                'qty',
-                'thumbnail'
+                'id','name','slug','brand_id',
+                'price_root','price_sale','qty','thumbnail'
             ])
             ->latest('id')
             ->paginate(5);
 
-        // ★ ADDED
         $products->getCollection()->transform(function ($p) {
             return $this->withThumbUrl($p);
         });
@@ -123,7 +98,23 @@ class ProductController extends Controller
         return $products->makeHidden(['brand','brand_id']);
     }
 
-    // Admin - thêm sản phẩm
+    // ⭐ Admin - xem chi tiết sản phẩm
+    public function adminShow($id)
+    {
+        $p = Product::with('brand:id,name')
+            ->select([
+                'id','name','slug','brand_id','category_id',
+                'price_root','price_sale','qty',
+                'detail','description','status','thumbnail'
+            ])
+            ->find($id);
+
+        if (!$p) return response()->json(['message' => 'Not found'], 404);
+
+        $p = $this->withThumbUrl($p);
+        return $p;
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -139,7 +130,6 @@ class ProductController extends Controller
             'thumbnail'   => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        // ★ ADDED: tạo slug nếu trống & đảm bảo duy nhất
         $nameForSlug = $data['name'] ?? '';
         $givenSlug   = $data['slug'] ?? '';
         $data['slug'] = $this->ensureUniqueSlug($givenSlug !== '' ? $givenSlug : $nameForSlug);
@@ -150,8 +140,6 @@ class ProductController extends Controller
         }
 
         $product = Product::create($data);
-
-        // ★ ADDED: trả kèm thumbnail_url
         $product = $this->withThumbUrl($product);
 
         return response()->json([
@@ -160,7 +148,6 @@ class ProductController extends Controller
         ], 201);
     }
 
-    // Admin - cập nhật sản phẩm
     public function update(Request $request, $id)
     {
         $product = Product::find($id);
@@ -179,7 +166,6 @@ class ProductController extends Controller
             'thumbnail'   => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        // ★ ADDED: nếu client gửi slug thì chuẩn hoá & unique; nếu không gửi thì giữ nguyên
         if (array_key_exists('slug', $data)) {
             $data['slug'] = $this->ensureUniqueSlug(
                 $data['slug'] !== '' ? $data['slug'] : ($data['name'] ?? $product->name),
@@ -195,8 +181,6 @@ class ProductController extends Controller
         }
 
         $product->update($data);
-
-        // ★ ADDED
         $product = $this->withThumbUrl($product);
 
         return response()->json([
@@ -205,7 +189,7 @@ class ProductController extends Controller
         ]);
     }
 
-    // Admin - xóa sản phẩm
+
     public function destroy($id)
     {
         $product = Product::find($id);
@@ -216,7 +200,6 @@ class ProductController extends Controller
         }
 
         $product->delete();
-
         return response()->json(['message' => 'Đã xóa sản phẩm']);
     }
 }

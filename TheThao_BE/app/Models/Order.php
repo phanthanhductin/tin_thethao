@@ -9,9 +9,9 @@ class Order extends Model
 {
     use HasFactory;
 
-    protected $table = 'ptdt_order';   // ✅ tên bảng thật
-    protected $primaryKey = 'id';      // ✅ khóa chính
-    public $timestamps = true;         // có created_at, updated_at
+    protected $table = 'ptdt_order';
+    protected $primaryKey = 'id';
+    public $timestamps = true;
 
     protected $fillable = [
         'user_id',
@@ -22,11 +22,22 @@ class Order extends Model
         'note',
         'status',
         'updated_by',
+        'total',
+        'payment_method',
+        'created_by',
     ];
 
-    // Quan hệ: 1 order có nhiều order detail
     public function details()
     {
         return $this->hasMany(OrderDetail::class, 'order_id');
     }
+
+    // Alias để FE dùng 'items'
+    public function items()
+    {
+        return $this->hasMany(OrderDetail::class, 'order_id');
+    }
+
+    // ⚠️ Bạn đang có method show() trong Model — không dùng tới.
+    // Để hạn chế đụng chạm, mình để nguyên. (An toàn vì không được gọi qua route.)
 }

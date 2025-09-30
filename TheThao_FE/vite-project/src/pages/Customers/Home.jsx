@@ -2,8 +2,61 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ProductCard from "../../components/ProductCard";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "http://127.0.0.1:8000"; // Nếu API dùng prefix /api thì đổi thành "...:8000/api"
 const PLACEHOLDER = "https://placehold.co/300x200?text=No+Image";
+
+// Card danh mục tái sử dụng
+function CategoryCard({ c, onClick, style }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: "#1e1e1e",
+        borderRadius: 12,
+        boxShadow: "0 0 10px rgba(0,255,170,0.15)",
+        padding: 16,
+        minWidth: 360,
+        width: 380,
+        textAlign: "center",
+        fontWeight: 600,
+        fontSize: 18,
+        color: "#00e676",
+        border: "2px solid #00e676",
+        cursor: "pointer",
+        transition: "transform .2s ease, box-shadow .2s ease",
+        ...style,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-3px) scale(1.05)";
+        e.currentTarget.style.boxShadow = "0 0 18px rgba(0,255,170,0.5)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0) scale(1)";
+        e.currentTarget.style.boxShadow = "0 0 10px rgba(0,255,170,0.15)";
+      }}
+    >
+      <div
+        style={{
+          height: 160,
+          marginBottom: 8,
+          overflow: "hidden",
+          borderRadius: 8,
+          background: "#2a2a2a",
+        }}
+      >
+        {/* ✅ dùng c.image_url thay vì c.image */}
+        <img
+          src={c.image_url || PLACEHOLDER}
+          alt={c.name}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          onError={(e) => (e.currentTarget.src = PLACEHOLDER)}
+        />
+      </div>
+      {c.name}
+    </button>
+  );
+}
 
 export default function Home() {
   const [categories, setCategories] = useState([]);
@@ -43,11 +96,16 @@ export default function Home() {
     return () => ac.abort();
   }, []);
 
+  // ====== Tạo 2 hàng sole: 2 trên + 3 dưới ======
+  const topCats = categories.slice(0, 2);
+  const bottomCats = categories.slice(2, 5);
+  const restCats = categories.slice(5); // phần còn lại (nếu có), hiển thị grid thường
+
   return (
     <div
       style={{
         fontFamily: "Montserrat, Arial, sans-serif",
-        background: "#121212", // nền tối
+        background: "#121212",
         color: "#f5f5f5",
         minHeight: "100vh",
       }}
@@ -150,67 +208,78 @@ export default function Home() {
         {categories.length === 0 ? (
           <p style={{ textAlign: "center", color: "#aaa" }}>Chưa có danh mục.</p>
         ) : (
-          <div
-            style={{
-              display: "flex",
-              gap: 24,
-              justifyContent: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => navigate(`/category/${c.id}`)}
-                style={{
-                  background: "#1e1e1e",
-                  borderRadius: 12,
-                  boxShadow: "0 0 10px rgba(0,255,170,0.15)",
-                  padding: "18px",
-                  minWidth: 160,
-                  textAlign: "center",
-                  fontWeight: 600,
-                  fontSize: 16,
-                  color: "#00e676",
-                  border: "2px solid #00e676",
-                  cursor: "pointer",
-                  transition: "transform .2s ease, box-shadow .2s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-3px) scale(1.05)";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 18px rgba(0,255,170,0.5)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0) scale(1)";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 10px rgba(0,255,170,0.15)";
-                }}
-              >
-                <div
+          <div style={{ maxWidth: 1120, margin: "0 auto" }}>
+            {/* Hàng trên: 2 item */}
+            <div
+              style={{
+                display: "flex",
+                gap: 24,
+                justifyContent: "center",
+                marginBottom: 18,
+              }}
+            >
+              {topCats.map((c) => (
+                <CategoryCard
+                  key={c.id}
+                  c={c}
+                  onClick={() => navigate(`/category/${c.id}`)}
+                />
+              ))}
+            </div>
+
+            {/* Hàng dưới: 3 item (tự căn giữa nên sẽ lệch/sole với hàng trên) */}
+            <div
+              style={{
+                display: "flex",
+                gap: 24,
+                justifyContent: "center",
+                marginBottom: restCats.length ? 28 : 0,
+              }}
+            >
+              {bottomCats.map((c) => (
+                <CategoryCard
+                  key={c.id}
+                  c={c}
+                  onClick={() => navigate(`/category/${c.id}`)}
+                  // slight visual offset để nhìn "sole" rõ hơn
+                  style={{ transform: "translateY(6px)" }}
+                />
+              ))}
+            </div>
+
+            {/* Các danh mục còn lại (nếu có) */}
+            {restCats.length > 0 && (
+              <>
+                <h3
                   style={{
-                    height: 100,
-                    marginBottom: 8,
-                    overflow: "hidden",
-                    borderRadius: 8,
-                    background: "#2a2a2a",
+                    textAlign: "center",
+                    color: "#9e9e9e",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    marginBottom: 14,
                   }}
                 >
-                  <img
-                    src={c.image || PLACEHOLDER}
-                    alt={c.name}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                    }}
-                    onError={(e) => (e.currentTarget.src = PLACEHOLDER)}
-                  />
+                  Các danh mục khác
+                </h3>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 18,
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {restCats.map((c) => (
+                    <CategoryCard
+                      key={c.id}
+                      c={c}
+                      onClick={() => navigate(`/category/${c.id}`)}
+                      style={{ minWidth: 340, width: 360 }}
+                    />
+                  ))}
                 </div>
-                {c.name}
-              </button>
-            ))}
+              </>
+            )}
           </div>
         )}
       </section>
@@ -317,7 +386,6 @@ export default function Home() {
           }}
         >
           ⚽ VỀ CHÚNG TÔI
-
         </h2>
         <p style={{ color: "#e0e0e0", fontSize: 16, lineHeight: 1.6 }}>
           THETHAO SPORTS mang đến trang phục & phụ kiện thể thao chính hãng, bền bỉ và thời thượng. Chúng tôi tối ưu hiệu năng cho từng chuyển động, để bạn tự tin luyện tập, thi đấu và phá vỡ giới hạn mỗi ngày.
