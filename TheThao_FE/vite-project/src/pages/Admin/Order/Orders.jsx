@@ -42,7 +42,7 @@ export default function Orders() {
         setLoading(true);
         setErr("");
 
-        const token = localStorage.getItem("token");
+        const token = localStorage.getItem("admin_token") || localStorage.getItem("token");
         const url = `${API_BASE}/admin/orders?per_page=100${search ? `&search=${encodeURIComponent(search)}` : ""
           }`;
 

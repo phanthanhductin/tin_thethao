@@ -19,7 +19,13 @@ class Product extends Model
         'price_root' => 'float',
         'price_sale' => 'float',
     ];
+    public function variants(){
+    return $this->hasMany(\App\Models\ProductVariant::class, 'product_id');
+}
 
+public function category() {
+    return $this->belongsTo(Category::class, 'category_id');
+}
     // ✅ Thuộc tính ảo để FE dùng trực tiếp
     protected $appends = ['thumbnail_url','brand_name'];
 

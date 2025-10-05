@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const HOST = "http://127.0.0.1:8000";           // host cho ảnh/static
-const API_BASE = `${HOST}/api`;                 // base cho API
+const HOST = "http://127.0.0.1:8000";
+const API_BASE = `${HOST}/api`;
 
 export default function Categories() {
   const [rows, setRows] = useState([]);
@@ -12,7 +12,6 @@ export default function Categories() {
 
   useEffect(() => {
     const ac = new AbortController();
-
     (async () => {
       try {
         setLoading(true);
@@ -30,18 +29,15 @@ export default function Categories() {
         setLoading(false);
       }
     })();
-
     return () => ac.abort();
   }, []);
 
-  // Xóa thẳng từ API (DELETE /api/admin/categories/:id)
   const handleDelete = async (id) => {
     if (!window.confirm(`Xóa danh mục #${id}?`)) return;
-
     try {
-      const token = localStorage.getItem("token") || "";
+      const token = localStorage.getItem("admin_token") || "";
       if (!token) {
-        alert("Bạn cần đăng nhập (token) để xóa.");
+        alert("Bạn cần đăng nhập admin để xóa.");
         return;
       }
 
@@ -53,7 +49,6 @@ export default function Categories() {
         },
       });
 
-      // cố gắng đọc JSON kể cả khi lỗi để lấy message
       let payload = null;
       try { payload = await res.json(); } catch { }
 
@@ -62,7 +57,6 @@ export default function Categories() {
         throw new Error(msg);
       }
 
-      // cập nhật UI
       setRows((prev) => prev.filter((x) => x.id !== id));
     } catch (e) {
       console.error(e);

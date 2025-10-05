@@ -7,9 +7,13 @@ use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
+
 
 class OrderController extends Controller
 {
+    
     public function checkout(Request $request)
     {
         $data = $request->validate([
@@ -129,5 +133,114 @@ class OrderController extends Controller
                 ];
             })->values(),
         ]);
+    }
+
+    // 🌟 PUBLIC: /api/orders/track?code=...&phone=...
+    public function track(Request $request)
+    {
+        $code  = trim((string) $request->query('code', ''));
+        $phone = trim((string) $request->query('phone', ''));
+
+        if ($code === '' && $phone === '') {
+            return response()->json(['message' => 'Thiếu code hoặc phone'], 422);
+        }
+
+        $q = Order::query()
+            ->with(['details.product:id,thumbnail,name'])
+            ->withSum('details as computed_total', 'amount');
+
+        if ($phone !== '') {
+            $q->where('phone', $phone);
+        }
+
+        if ($code !== '') {
+            if (ctype_digit($code)) {
+                // code là số → hiểu là id
+                $q->where('id', (int) $code);
+            } else {
+                // nếu có cột 'code' thì tìm theo 'code'
+                $table = (new Order)->getTable();
+                if (Schema::hasColumn($table, 'code')) {
+                    $q->where('code', $code);
+                }
+            }
+        }
+
+        $order = $q->latest('id')->first();
+        if (!$order) {
+            return response()->json(['message' => 'Không tìm thấy đơn hàng'], 404);
+        }
+
+        // Trả về cùng format với show()
+        return $this->show($order->id);
+    }
+
+    /* =========================
+     * ✅ THÊM MỚI CHO FE: đơn của user đang đăng nhập
+     * ========================= */
+
+    // GET /api/orders/mine  (auth:sanctum)
+    public function mine(Request $request)
+    {
+        $userId = $request->user()->id ?? null;
+        if (!$userId) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $orders = Order::query()
+            ->withSum('details as computed_total', 'amount')
+            ->where('user_id', $userId)               // đổi thành customer_id nếu DB của bạn dùng cột đó
+            ->latest('id')
+            ->get();
+
+        $data = $orders->map(function ($o) {
+            return [
+                'id'             => $o->id,
+                'code'           => (string)($o->code ?? $o->id),
+                'name'           => $o->name,
+                'email'          => $o->email,
+                'phone'          => $o->phone,
+                'address'        => $o->address,
+                'status'         => (int)($o->status ?? 0),
+                'payment_status' => $o->payment_status ?? null,
+                'payment_method' => $o->payment_method ?? null,
+                'total'          => (float)($o->total ?? $o->computed_total ?? 0),
+                'created_at'     => $o->created_at,
+                'updated_at'     => $o->updated_at,
+                'user_id'        => $o->user_id,
+            ];
+        })->values();
+
+        return response()->json(['data' => $data]);
+    }
+
+    // (tuỳ chọn cho admin) GET /api/admin/orders/user/{id}
+    public function byUser($id)
+    {
+        $orders = Order::query()
+            ->withSum('details as computed_total', 'amount')
+            ->where('user_id', $id)                    // đổi thành customer_id nếu cần
+            ->latest('id')
+            ->get();
+
+        $data = $orders->map(function ($o) {
+            return [
+                'id'             => $o->id,
+                'code'           => (string)($o->code ?? $o->id),
+                'name'           => $o->name,
+                'email'          => $o->email,
+                'phone'          => $o->phone,
+                'address'        => $o->address,
+                'status'         => (int)($o->status ?? 0),
+                'payment_status' => $o->payment_status ?? null,
+                'payment_method' => $o->payment_method ?? null,
+                'total'          => (float)($o->total ?? $o->computed_total ?? 0),
+                'created_at'     => $o->created_at,
+                'updated_at'     => $o->updated_at,
+                'user_id'        => $o->user_id,
+            ];
+        })->values();
+
+        return response()->json(['data' => $data]);
     }
 }

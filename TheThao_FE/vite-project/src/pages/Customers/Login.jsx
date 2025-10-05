@@ -1,6 +1,6 @@
 // vite-project/src/pages/Login.jsx
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom"; // ⬅️ thêm Link
 
 export default function Login() {
   const navigate = useNavigate();
@@ -59,6 +59,9 @@ export default function Login() {
         if (data.user) {
           localStorage.setItem("user", JSON.stringify(data.user));
         }
+
+        // 🔔 Báo cho TopBar cập nhật NGAY (không cần refresh)
+        window.dispatchEvent(new Event("auth-changed"));
 
         // ✅ Thông báo
         alert(data.message || "Đăng nhập thành công!");
@@ -209,6 +212,13 @@ export default function Login() {
             </div>
           ))}
 
+          {/* ⬇️ Link tới trang Quên mật khẩu */}
+          <div style={{ textAlign: "right", marginBottom: 18 }}>
+            <Link to="/forgot-password" style={{ color: "#1e88e5", textDecoration: "underline", fontSize: 14 }}>
+              Quên mật khẩu?
+            </Link>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -216,7 +226,7 @@ export default function Login() {
               width: "100%",
               padding: "12px",
               borderRadius: 10,
-              border: 0,
+              border: 0, // ✅ fix lỗi cú pháp: bỏ chữ "token" dư
               cursor: "pointer",
               background: loading ? "#9ccc65" : "#023ea5c6",
               color: "#fff",

@@ -8,13 +8,8 @@ export default function AddCategory() {
     const navigate = useNavigate();
 
     const [form, setForm] = useState({
-        name: "",
-        slug: "",
-        description: "",
-        sort_order: "",
-        parent_id: "",
-        image: "",
-        status: 1, // 0|1 (integer)
+        name: "", slug: "", description: "", sort_order: "",
+        parent_id: "", image: "", status: 1,
     });
 
     const [loading, setLoading] = useState(false);
@@ -23,12 +18,8 @@ export default function AddCategory() {
     const handleChange = (e) => {
         const { name, value } = e.target;
         setForm((prev) => ({ ...prev, [name]: value }));
-
-        // Tự tạo slug khi slug đang trống
         if (name === "name" && !form.slug) {
-            const s = value
-                .toLowerCase()
-                .normalize("NFD")
+            const s = value.toLowerCase().normalize("NFD")
                 .replace(/[\u0300-\u036f]/g, "")
                 .replace(/[^a-z0-9]+/g, "-")
                 .replace(/(^-|-$)/g, "");
@@ -42,22 +33,18 @@ export default function AddCategory() {
         setError("");
 
         try {
-            // 👉 chuẩn hoá dữ liệu gửi đi
             const payload = {
                 name: form.name,
-                slug: form.slug || form.name, // phòng trường hợp slug bỏ trống
+                slug: form.slug || form.name,
                 description: form.description || "",
                 sort_order: form.sort_order === "" ? 0 : Number(form.sort_order),
                 parent_id: form.parent_id === "" ? null : Number(form.parent_id),
                 image: form.image || null,
-                status: Number(form.status), // Laravel yêu cầu integer
+                status: Number(form.status),
             };
 
-            // 👉 bắt buộc có token vì /admin có middleware auth:sanctum
-            const token = localStorage.getItem("token") || "";
-            if (!token) {
-                throw new Error("Bạn chưa đăng nhập (thiếu token). Vui lòng đăng nhập lại.");
-            }
+            const token = localStorage.getItem("admin_token") || "";
+            if (!token) throw new Error("Bạn chưa đăng nhập admin (thiếu token).");
 
             const res = await fetch(`${API_BASE}/admin/categories`, {
                 method: "POST",
@@ -69,7 +56,6 @@ export default function AddCategory() {
                 body: JSON.stringify(payload),
             });
 
-            // Xử lý lỗi Laravel validation 422
             if (!res.ok) {
                 let message = `Thêm thất bại (HTTP ${res.status})`;
                 try {
@@ -96,6 +82,7 @@ export default function AddCategory() {
             setLoading(false);
         }
     };
+
 
     return (
         <section style={{ padding: 20 }}>

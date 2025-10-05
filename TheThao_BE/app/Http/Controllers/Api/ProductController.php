@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\Category; // ✅ dùng để dò danh mục theo keyword
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
@@ -36,13 +38,100 @@ class ProductController extends Controller
     }
 
     // ===== Public APIs =====
-    public function index()
+    public function index(Request $request)
     {
-        $products = Product::with('brand:id,name')
-            ->select(['id','name','brand_id','price_sale as price','thumbnail'])
-            ->latest('id')
-            ->paginate(12);
+        // ✅ Trả đủ trường cho FE/fallback
+        $q = Product::with('brand:id,name')
+            ->select([
+                'id',
+                'name',
+                'brand_id',
+                'category_id',
+                'price_root',
+                'price_sale',
+                DB::raw('price_sale as price'),
+                'thumbnail'
+            ]);
 
+        /* ====== Lọc ====== */
+
+        // Keyword: keyword | q
+        $kw = trim($request->query('keyword', $request->query('q', '')));
+        if ($kw !== '') {
+            $kwSlug = Str::slug($kw); // "bóng rổ" -> "bong-ro"
+
+            // 🔍 Thử tìm danh mục có name/slug khớp keyword
+            $catIds = Category::query()
+                ->where(function ($w) use ($kw, $kwSlug) {
+                    $w->where('name', 'like', "%{$kw}%")
+                      ->orWhere('slug', 'like', "%{$kwSlug}%");
+                })
+                ->pluck('id');
+
+            if ($catIds->count() > 0) {
+                // ✅ Nếu keyword khớp danh mục -> CHỈ trả về sản phẩm thuộc các danh mục đó
+                $q->whereIn('category_id', $catIds->all());
+            } else {
+                // Không khớp danh mục -> tìm theo tên/slug sản phẩm như thường lệ
+                $q->where(function ($x) use ($kw, $kwSlug) {
+                    $x->where('name', 'like', "%{$kw}%")
+                      ->orWhere('slug', 'like', "%{$kwSlug}%");
+                });
+            }
+        }
+
+        // Danh mục (nếu người dùng chọn ở filter)
+        if ($request->filled('category_id')) {
+            $q->where('category_id', (int) $request->query('category_id'));
+        }
+
+        // Khoảng giá theo giá hiệu lực (sale nếu có, không thì root)
+        $priceExpr = DB::raw('COALESCE(price_sale, price_root)');
+        if ($request->filled('min_price')) {
+            $q->where($priceExpr, '>=', (float) $request->query('min_price'));
+        }
+        if ($request->filled('max_price')) {
+            $q->where($priceExpr, '<=', (float) $request->query('max_price'));
+        }
+
+        // Chỉ sản phẩm giảm giá
+        if ($request->boolean('only_sale')) {
+            $q->whereNotNull('price_root')
+              ->whereNotNull('price_sale')
+              ->whereColumn('price_sale', '<', 'price_root');
+        }
+
+        // Chỉ còn hàng
+        if ($request->boolean('in_stock')) {
+            $q->where(function ($x) {
+                $x->where('qty', '>', 0)
+                  ->orWhere('status', 'active')
+                  ->orWhere('status', 1);
+            });
+        }
+
+        /* ====== Sắp xếp ====== */
+        // sort = created_at:desc | price:asc | price:desc | name:asc | name:desc
+        [$field, $dir] = array_pad(explode(':', (string) $request->query('sort', 'created_at:desc'), 2), 2, 'asc');
+        $dir = strtolower($dir) === 'desc' ? 'desc' : 'asc';
+
+        if ($field === 'price') {
+            $q->orderByRaw('COALESCE(price_sale, price_root) ' . $dir);
+        } elseif ($field === 'name') {
+            $q->orderBy('name', $dir);
+        } elseif ($field === 'created_at') {
+            $q->orderBy('created_at', $dir);
+        } else {
+            $q->orderBy('id', 'desc');
+        }
+
+        /* ====== Phân trang ====== */
+        $perPage = (int) $request->query('per_page', 12);
+        $perPage = max(1, min(100, $perPage));
+
+        $products = $q->paginate($perPage);
+
+        // thumbnail_url
         $products->getCollection()->transform(function ($p) {
             return $this->withThumbUrl($p);
         });
@@ -54,8 +143,19 @@ class ProductController extends Controller
     {
         $p = Product::with('brand:id,name')
             ->select([
-                'id','name','brand_id','price_sale as price',
-                'thumbnail','detail','description','category_id',
+                'id',
+                'name',
+                'brand_id',
+                'category_id',
+                'price_root',
+                'price_sale',
+                DB::raw('price_sale as price'),
+                'thumbnail',
+                'detail',
+                'description',
+                // ✅ bổ sung 2 trường tồn kho
+                'qty',
+                'status',
             ])
             ->find($id);
 
@@ -188,7 +288,6 @@ class ProductController extends Controller
             'data'    => $product
         ]);
     }
-
 
     public function destroy($id)
     {

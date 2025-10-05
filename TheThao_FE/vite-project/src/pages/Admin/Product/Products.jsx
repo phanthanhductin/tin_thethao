@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API_BASE = "http://127.0.0.1:8000/api"; // ✅ Laravel API (có /api)
+const API_BASE = "http://127.0.0.1:8000/api";
 
 export default function Products() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [deletingId, setDeletingId] = useState(null); // ✅ khoá nút khi đang xoá
+  const [deletingId, setDeletingId] = useState(null);
   const navigate = useNavigate();
 
-  // Lấy sản phẩm từ API (admin, cần Bearer token)
   useEffect(() => {
     const ac = new AbortController();
 
@@ -20,23 +19,21 @@ export default function Products() {
         setLoading(true);
         setErr("");
 
-        const token = localStorage.getItem("token");
+        const token = localStorage.getItem("admin_token");
         const res = await fetch(`${API_BASE}/admin/products`, {
           signal: ac.signal,
           headers: {
             Accept: "application/json",
-            Authorization: `Bearer ${token}`, // ✅ bắt buộc cho auth:sanctum
+            Authorization: `Bearer ${token}`,
           },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = await res.json();
-        // adminIndex trả về dạng paginate => data.data là mảng
         const list = Array.isArray(data) ? data : data.data ?? [];
         setItems(list);
       } catch (e) {
-        if (e.name !== "AbortError")
-          setErr("Không tải được danh sách sản phẩm.");
+        if (e.name !== "AbortError") setErr("Không tải được danh sách sản phẩm.");
       } finally {
         setLoading(false);
       }
@@ -45,9 +42,8 @@ export default function Products() {
     return () => ac.abort();
   }, []);
 
-  // Xoá sản phẩm (DELETE /admin/products/{id})
   async function handleDelete(id) {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("admin_token");
     if (!window.confirm("Bạn chắc chắn muốn xoá sản phẩm này?")) return;
 
     try {
@@ -62,11 +58,8 @@ export default function Products() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || "Xoá thất bại");
-      }
+      if (!res.ok) throw new Error(data.message || "Xoá thất bại");
 
-      // Cập nhật UI
       setItems((prev) => prev.filter((x) => x.id !== id));
       alert("✅ Đã xoá sản phẩm");
     } catch (err) {
@@ -77,7 +70,6 @@ export default function Products() {
     }
   }
 
-  // Filter theo tên hoặc slug
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return items;

@@ -5,83 +5,82 @@ const API_BASE = "http://127.0.0.1:8000/api";
 const VND = new Intl.NumberFormat("vi-VN");
 
 const badgeStyle = (status) => {
-    const ok = status === 1 || status === "Completed";
-    return {
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: ok ? "#e7f9ee" : "#fff6e6",
-        color: ok ? "#0a7a3f" : "#a35b00",
-        fontSize: 12,
-    };
+  const ok = status === 1 || status === "Completed";
+  return {
+    display: "inline-block",
+    padding: "2px 8px",
+    borderRadius: 999,
+    background: ok ? "#e7f9ee" : "#fff6e6",
+    color: ok ? "#0a7a3f" : "#a35b00",
+    fontSize: 12,
+  };
 };
 
 const humanStatus = (s) => {
-    if (typeof s === "string") return s;
-    switch (Number(s)) {
-        case 0: return "Pending";
-        case 1: return "Completed";
-        case 2: return "Cancelled";
-        default: return "Unknown";
-    }
+  if (typeof s === "string") return s;
+  switch (Number(s)) {
+    case 0: return "Pending";
+    case 1: return "Completed";
+    case 2: return "Cancelled";
+    default: return "Unknown";
+  }
 };
 
 export default function OrderDetail() {
-    const { id } = useParams();
-    const [order, setOrder] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [err, setErr] = useState("");
+  const { id } = useParams();
+  const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
 
-    useEffect(() => {
-        let ignore = false;
-        (async () => {
-            try {
-                setLoading(true);
-                setErr("");
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setErr("");
 
-                const token = localStorage.getItem("token");
-                // ✅ ĐÚNG ENDPOINT: /api/admin/orders/:id
-                const url = `${API_BASE}/admin/orders/${id}`;
+        // 🔑 PHẢI LÀ admin_token (đăng nhập qua /api/admin/login)
+        const token = localStorage.getItem("admin_token") || "";
+        if (!token) {
+          throw new Error("Bạn chưa đăng nhập admin (thiếu admin_token).");
+        }
 
-                const res = await fetch(url, {
-                    headers: {
-                        Accept: "application/json",
-                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                    },
-                });
+        const res = await fetch(`${API_BASE}/admin/orders/${id}`, {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-                if (!res.ok) {
-                    let msg = `HTTP ${res.status}`;
-                    try {
-                        const j = await res.json();
-                        if (j?.message) msg += ` - ${j.message}`;
-                    } catch { }
-                    throw new Error(msg);
-                }
+        // đọc body 1 lần rồi phân tích
+        const text = await res.text();
+        let body = {};
+        try { body = text ? JSON.parse(text) : {}; } catch { /* ignore */ }
 
-                const data = await res.json();
-                if (!ignore) setOrder(data);
-            } catch (e) {
-                console.error(e);
-                if (!ignore) setErr("Không tải được chi tiết đơn hàng.");
-            } finally {
-                if (!ignore) setLoading(false);
-            }
-        })();
-        return () => {
-            ignore = true;
-        };
-    }, [id]);
+        if (!res.ok) {
+          if (res.status === 401) throw new Error("Bạn chưa đăng nhập admin hoặc token đã hết hạn.");
+          if (res.status === 403) throw new Error(body?.message || "Token không có quyền admin (ability 'admin').");
+          throw new Error(body?.message ? `HTTP ${res.status} - ${body.message}` : `HTTP ${res.status}`);
+        }
 
-    if (loading) return <p>Đang tải...</p>;
-    if (err) return <p style={{ color: "#d32f2f" }}>{err}</p>;
-    if (!order) return <p>Không tìm thấy đơn hàng.</p>;
+        if (!ignore) setOrder(body);
+      } catch (e) {
+        console.error(e);
+        if (!ignore) setErr(e.message || "Không tải được chi tiết đơn hàng.");
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [id]);
 
-    const items = order.items || [];
-    const total = Number(
-        order.total ??
-        items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 0), 0)
-    );
+  if (loading) return <p>Đang tải...</p>;
+  if (err) return <p style={{ color: "#d32f2f" }}>{err}</p>;
+  if (!order) return <p>Không tìm thấy đơn hàng.</p>;
+
+  const items = order.items || [];
+  const total = Number(order.total ?? items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 0), 0));
+
 
     return (
         <section>

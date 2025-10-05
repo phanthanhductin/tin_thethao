@@ -9,18 +9,11 @@ export default function EditCategory() {
     const navigate = useNavigate();
 
     const [form, setForm] = useState({
-        name: "",
-        slug: "",
-        description: "",
-        sort_order: "",
-        parent_id: "",
-        image: "",
-        status: 1, // 0 | 1 (số)
+        name: "", slug: "", description: "", sort_order: "", parent_id: "", image: "", status: 1,
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    // Lấy dữ liệu category cũ (public)
     useEffect(() => {
         (async () => {
             try {
@@ -48,7 +41,6 @@ export default function EditCategory() {
         })();
     }, [id]);
 
-    // helper ép kiểu
     const toIntOrNull = (v) => {
         if (v === "" || v === null || v === undefined) return null;
         const n = Number(v);
@@ -63,11 +55,8 @@ export default function EditCategory() {
         const { name, value } = e.target;
         setForm((prev) => {
             const next = { ...prev, [name]: value };
-            // auto slug khi đang trống slug và gõ name
             if (name === "name" && !prev.slug) {
-                const s = value
-                    .toLowerCase()
-                    .normalize("NFD")
+                const s = value.toLowerCase().normalize("NFD")
                     .replace(/[\u0300-\u036f]/g, "")
                     .replace(/[^a-z0-9]+/g, "-")
                     .replace(/(^-|-$)/g, "");
@@ -84,7 +73,7 @@ export default function EditCategory() {
         try {
             if (!form.name) throw new Error("Vui lòng nhập tên danh mục");
 
-            const token = localStorage.getItem("token") || "";
+            const token = localStorage.getItem("admin_token") || "";
 
             const payload = {
                 name: form.name,
@@ -93,10 +82,9 @@ export default function EditCategory() {
                 sort_order: toIntOrZero(form.sort_order),
                 parent_id: toIntOrNull(form.parent_id),
                 image: form.image || "",
-                status: toIntOrZero(form.status) === 0 ? 0 : 1, // đảm bảo integer 0|1
+                status: toIntOrZero(form.status) === 0 ? 0 : 1,
             };
 
-            // --- Cách 1: PUT JSON tới /api/admin/categories/:id ---
             let res = await fetch(`${API_BASE}/admin/categories/${id}`, {
                 method: "PUT",
                 headers: {
@@ -107,7 +95,6 @@ export default function EditCategory() {
                 body: JSON.stringify(payload),
             });
 
-            // Fallback nếu server/proxy không cho PUT (405) -> POST + _method=PUT
             if (res.status === 405) {
                 const fd = new FormData();
                 Object.entries(payload).forEach(([k, v]) => fd.append(k, v ?? ""));
@@ -124,17 +111,10 @@ export default function EditCategory() {
             }
 
             let data = {};
-            try {
-                data = await res.json();
-            } catch {
-                // ignore
-            }
+            try { data = await res.json(); } catch { }
 
             if (!res.ok) {
-                const msg =
-                    data?.message ||
-                    (data?.errors ? Object.values(data.errors).flat().join(", ") : "") ||
-                    `HTTP ${res.status}`;
+                const msg = data?.message || (data?.errors ? Object.values(data.errors).flat().join(", ") : "") || `HTTP ${res.status}`;
                 throw new Error(msg);
             }
 
@@ -146,6 +126,7 @@ export default function EditCategory() {
     };
 
     if (loading) return <p>Đang tải...</p>;
+
 
     return (
         <section style={{ padding: 20 }}>

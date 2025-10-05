@@ -1,4 +1,3 @@
-// src/pages/Customers/Checkout.jsx
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -14,7 +13,7 @@ export default function Checkout({ setCart }) {
   const [form, setForm] = useState({
     customer_name: "",
     phone: "",
-    email: "",
+    email: "",       // ✅ thêm email
     address: "",
     payment_method: "COD",
   });
@@ -43,16 +42,34 @@ export default function Checkout({ setCart }) {
         },
         body: JSON.stringify({
           ...form,
-          items: cart,
+          items: cart, // ✅ gửi giỏ hàng nhận được từ Cart.jsx
         }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        alert("✅ Đặt hàng thành công! Mã đơn hàng: " + data.order_id);
+        // 🔑 Lấy mã đơn theo nhiều khả năng trả về của API
+        const orderCode =
+          data?.code ||
+          data?.order_code ||
+          data?.order?.code ||
+          data?.order_id ||
+          data?.id;
+
+        // (tuỳ bạn muốn giữ alert hay không)
+        alert("✅ Đặt hàng thành công!" + (orderCode ? " Mã đơn: " + orderCode : ""));
+
+        // Lưu để tự điền ở trang /track lần sau
+        if (orderCode) localStorage.setItem("last_order_code", String(orderCode));
+
+        // Xoá giỏ & điều hướng sang trang Theo dõi
         setCart([]);
-        navigate("/");
+        if (orderCode) {
+          navigate(`/track?code=${encodeURIComponent(orderCode)}`, { replace: true });
+        } else {
+          navigate("/track", { replace: true });
+        }
       } else {
         setError(data.message || "Có lỗi xảy ra.");
       }
@@ -64,47 +81,22 @@ export default function Checkout({ setCart }) {
   };
 
   return (
-    <div
-      style={{
-        maxWidth: 960,
-        margin: "40px auto",
-        padding: 20,
-        fontFamily: "Montserrat, Arial, sans-serif",
-        background: "#121212",
-        color: "#f5f5f5",
-        borderRadius: 16,
-        boxShadow: "0 0 18px rgba(0,255,170,0.2)",
-      }}
-    >
-      <h2
-        style={{
-          marginBottom: 30,
-          color: "#00e676",
-          fontSize: 28,
-          fontWeight: 900,
-          textTransform: "uppercase",
-          textAlign: "center",
-          textShadow: "0 0 10px rgba(0,230,118,0.6)",
-        }}
-      >
-        🧾 Thanh toán
-      </h2>
+    <div style={{ maxWidth: 800, margin: "30px auto", padding: 20 }}>
+      <h2 style={{ marginBottom: 20, color: "#388e3c" }}>🧾 Thanh toán</h2>
 
+      {/* nếu giỏ hàng trống */}
       {cart.length === 0 ? (
-        <p style={{ textAlign: "center", color: "#ff5252" }}>
-          ⚠️ Giỏ hàng của bạn đang trống, vui lòng quay lại chọn sản phẩm.
-        </p>
+        <p>⚠️ Giỏ hàng của bạn đang trống, vui lòng quay lại chọn sản phẩm.</p>
       ) : (
         <>
           {error && (
             <p
               style={{
-                color: "#ff5252",
-                background: "rgba(255,82,82,0.1)",
-                padding: "12px 14px",
-                borderRadius: 10,
-                marginBottom: 20,
-                textAlign: "center",
+                color: "#d32f2f",
+                background: "#fdecea",
+                padding: "10px 12px",
+                borderRadius: 8,
+                marginBottom: 16,
               }}
             >
               {error}
@@ -115,7 +107,7 @@ export default function Checkout({ setCart }) {
             style={{
               display: "grid",
               gridTemplateColumns: "2fr 1fr",
-              gap: 24,
+              gap: 20,
               alignItems: "flex-start",
             }}
           >
@@ -123,55 +115,38 @@ export default function Checkout({ setCart }) {
             <form
               onSubmit={handleSubmit}
               style={{
-                background: "#1e1e1e",
-                padding: 24,
-                borderRadius: 14,
-                boxShadow: "0 0 12px rgba(0,229,255,0.15)",
+                background: "#fff",
+                padding: 20,
+                borderRadius: 12,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
               }}
             >
-              <h3 style={{ marginBottom: 18, color: "#00e5ff" }}>
-                Thông tin khách hàng
-              </h3>
+              <h3 style={{ marginBottom: 16 }}>Thông tin khách hàng</h3>
 
-              <div style={{ marginBottom: 14 }}>
+              <div style={{ marginBottom: 12 }}>
                 <label>Họ và tên</label>
                 <input
                   name="customer_name"
                   value={form.customer_name}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    borderRadius: 8,
-                    border: "1px solid #333",
-                    marginTop: 6,
-                    background: "#2a2a2a",
-                    color: "#fff",
-                  }}
+                  style={{ width: "100%", padding: 10 }}
                 />
               </div>
 
-              <div style={{ marginBottom: 14 }}>
+              <div style={{ marginBottom: 12 }}>
                 <label>Số điện thoại</label>
                 <input
                   name="phone"
                   value={form.phone}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    borderRadius: 8,
-                    border: "1px solid #333",
-                    marginTop: 6,
-                    background: "#2a2a2a",
-                    color: "#fff",
-                  }}
+                  style={{ width: "100%", padding: 10 }}
                 />
               </div>
 
-              <div style={{ marginBottom: 14 }}>
+              {/* ✅ Thêm Email */}
+              <div style={{ marginBottom: 12 }}>
                 <label>Email</label>
                 <input
                   type="email"
@@ -179,19 +154,11 @@ export default function Checkout({ setCart }) {
                   value={form.email}
                   onChange={handleChange}
                   required
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    borderRadius: 8,
-                    border: "1px solid #333",
-                    marginTop: 6,
-                    background: "#2a2a2a",
-                    color: "#fff",
-                  }}
+                  style={{ width: "100%", padding: 10 }}
                 />
               </div>
 
-              <div style={{ marginBottom: 14 }}>
+              <div style={{ marginBottom: 12 }}>
                 <label>Địa chỉ giao hàng</label>
                 <textarea
                   name="address"
@@ -199,15 +166,7 @@ export default function Checkout({ setCart }) {
                   onChange={handleChange}
                   required
                   rows={3}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    borderRadius: 8,
-                    border: "1px solid #333",
-                    marginTop: 6,
-                    background: "#2a2a2a",
-                    color: "#fff",
-                  }}
+                  style={{ width: "100%", padding: 10 }}
                 />
               </div>
 
@@ -217,15 +176,7 @@ export default function Checkout({ setCart }) {
                   name="payment_method"
                   value={form.payment_method}
                   onChange={handleChange}
-                  style={{
-                    width: "100%",
-                    padding: 12,
-                    borderRadius: 8,
-                    border: "1px solid #333",
-                    marginTop: 6,
-                    background: "#2a2a2a",
-                    color: "#fff",
-                  }}
+                  style={{ width: "100%", padding: 10 }}
                 >
                   <option value="COD">Thanh toán khi nhận hàng</option>
                   <option value="Bank">Chuyển khoản ngân hàng</option>
@@ -237,26 +188,14 @@ export default function Checkout({ setCart }) {
                 disabled={loading}
                 style={{
                   width: "100%",
-                  padding: "14px 16px",
-                  background: "linear-gradient(90deg,#00c853,#ff6d00)",
+                  padding: "12px 16px",
+                  background: "#388e3c",
                   color: "#fff",
-                  fontWeight: 700,
+                  fontWeight: 600,
                   fontSize: 16,
                   border: "none",
-                  borderRadius: 12,
+                  borderRadius: 10,
                   cursor: "pointer",
-                  boxShadow: "0 0 12px rgba(255,109,0,0.4)",
-                  transition: "transform .2s ease, box-shadow .2s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "scale(1.05)";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 18px rgba(0,229,255,0.5)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "scale(1)";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 12px rgba(255,109,0,0.4)";
                 }}
               >
                 {loading ? "⏳ Đang xử lý..." : "✅ Xác nhận đặt hàng"}
@@ -266,15 +205,13 @@ export default function Checkout({ setCart }) {
             {/* Thông tin giỏ hàng */}
             <div
               style={{
-                background: "#1e1e1e",
-                padding: 24,
-                borderRadius: 14,
-                boxShadow: "0 0 12px rgba(0,255,170,0.15)",
+                background: "#fff",
+                padding: 20,
+                borderRadius: 12,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
               }}
             >
-              <h3 style={{ marginBottom: 16, color: "#ff7043" }}>
-                Đơn hàng của bạn
-              </h3>
+              <h3 style={{ marginBottom: 16 }}>Đơn hàng của bạn</h3>
               <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {cart.map((item) => (
                   <li
@@ -283,28 +220,25 @@ export default function Checkout({ setCart }) {
                       display: "flex",
                       justifyContent: "space-between",
                       marginBottom: 10,
-                      borderBottom: "1px dashed #333",
+                      borderBottom: "1px dashed #eee",
                       paddingBottom: 6,
                     }}
                   >
                     <span>
                       {item.name} x {item.qty}
                     </span>
-                    <span style={{ color: "#00e5ff" }}>
-                      {(item.price * item.qty).toLocaleString()} đ
-                    </span>
+                    <span>{(item.price * item.qty).toLocaleString()} đ</span>
                   </li>
                 ))}
               </ul>
 
               <h3
                 style={{
-                  marginTop: 20,
-                  color: "#ff5252",
-                  fontWeight: 800,
-                  fontSize: 20,
+                  marginTop: 16,
+                  color: "#d32f2f",
+                  fontWeight: 700,
+                  fontSize: 18,
                   textAlign: "right",
-                  textShadow: "0 0 6px rgba(255,82,82,0.6)",
                 }}
               >
                 Tổng cộng: {total.toLocaleString()} đ

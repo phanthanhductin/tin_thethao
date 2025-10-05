@@ -1,4 +1,6 @@
+// src/components/ProductCard.jsx
 import { Link } from "react-router-dom";
+import HeartButton from "./HeartButton";
 
 const PLACEHOLDER = "https://placehold.co/300x200?text=No+Image";
 
@@ -10,6 +12,7 @@ export default function ProductCard({ p }) {
     <div
       className="product-card"
       style={{
+        position: "relative",
         background: "#fff",
         borderRadius: 12,
         boxShadow: "0 2px 8px #e0f2f1",
@@ -28,11 +31,13 @@ export default function ProductCard({ p }) {
         e.currentTarget.style.boxShadow = "0 2px 8px #e0f2f1";
       }}
     >
+      {/* Nút trái tim */}
+      <div style={{ position: "absolute", right: 10, top: 10, zIndex: 2 }}>
+        <HeartButton productId={p.id} />
+      </div>
+
       {/* ✅ Link sang chi tiết sản phẩm */}
-      <Link
-        to={`/products/${p.id}`}
-        style={{ textDecoration: "none", color: "inherit" }}
-      >
+      <Link to={`/products/${p.id}`} style={{ textDecoration: "none", color: "inherit" }}>
         <div className="product-image" style={{ marginBottom: 10 }}>
           <img
             src={imgSrc}
@@ -44,14 +49,11 @@ export default function ProductCard({ p }) {
               borderRadius: 8,
               background: "#f9f9f9",
             }}
-            onError={(e) => {
-              e.currentTarget.src = PLACEHOLDER;
-            }}
+            onError={(e) => { e.currentTarget.src = PLACEHOLDER; }}
           />
         </div>
 
         <div className="product-info">
-          {/* ✅ Tên sản phẩm */}
           <div
             className="name"
             style={{
@@ -63,30 +65,17 @@ export default function ProductCard({ p }) {
               overflow: "hidden",
               display: "-webkit-box",
               WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2, // giới hạn 2 dòng
+              WebkitLineClamp: 2,
             }}
           >
             {p.name}
           </div>
 
-          {/* ✅ Thương hiệu */}
-          <div
-            className="brand"
-            style={{ color: "#388e3c", fontSize: 13, marginTop: 4 }}
-          >
+          <div className="brand" style={{ color: "#388e3c", fontSize: 13, marginTop: 4 }}>
             {p.brand_name ? `${p.brand_name}` : "Farm Local"}
           </div>
 
-          {/* ✅ Giá */}
-          <div
-            className="price"
-            style={{
-              color: "#2e7d32",
-              fontWeight: "bold",
-              marginTop: 6,
-              fontSize: 15,
-            }}
-          >
+          <div className="price" style={{ color: "#2e7d32", fontWeight: "bold", marginTop: 6, fontSize: 15 }}>
             {price.toLocaleString()} đ
           </div>
         </div>

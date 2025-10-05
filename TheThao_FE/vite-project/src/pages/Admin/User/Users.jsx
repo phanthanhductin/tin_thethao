@@ -10,7 +10,7 @@ export default function Users() {
   const [err, setErr] = useState("");
   const [deletingId, setDeletingId] = useState(null); // giống Products: khoá nút khi xoá
 
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("admin_token") || localStorage.getItem("token");
 
   const fetchUsers = async () => {
     try {

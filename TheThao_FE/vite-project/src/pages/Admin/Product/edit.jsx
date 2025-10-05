@@ -25,16 +25,15 @@ export default function EditProduct() {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
-    // Lấy dữ liệu sản phẩm theo id (admin)
     useEffect(() => {
         const fetchProduct = async () => {
             try {
-                const token = localStorage.getItem("token");
+                const token = localStorage.getItem("admin_token");
 
                 const res = await fetch(`${API_BASE}/admin/products/${id}`, {
                     headers: {
                         Accept: "application/json",
-                        Authorization: `Bearer ${token}`, // 👈 BẮT BUỘC CHO auth:sanctum
+                        Authorization: `Bearer ${token}`,
                     },
                 });
                 if (!res.ok) {
@@ -55,7 +54,7 @@ export default function EditProduct() {
                     detail: data.detail || "",
                     description: data.description || "",
                     status: data.status ?? 1,
-                    thumbnail: null, // không set file, chỉ hiển thị preview
+                    thumbnail: null,
                 }));
                 setPreview(data.thumbnail_url || null);
             } catch (err) {
@@ -85,7 +84,7 @@ export default function EditProduct() {
         setSuccess("");
 
         try {
-            const token = localStorage.getItem("token");
+            const token = localStorage.getItem("admin_token");
 
             const fd = new FormData();
             Object.entries(form).forEach(([k, v]) => {
@@ -94,10 +93,10 @@ export default function EditProduct() {
             fd.append("_method", "PUT");
 
             const res = await fetch(`${API_BASE}/admin/products/${id}`, {
-                method: "POST", // PUT qua _method
+                method: "POST",
                 headers: {
                     Accept: "application/json",
-                    Authorization: `Bearer ${token}`, // 👈 BẮT BUỘC
+                    Authorization: `Bearer ${token}`,
                 },
                 body: fd,
             });

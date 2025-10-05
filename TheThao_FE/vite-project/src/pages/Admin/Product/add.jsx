@@ -9,7 +9,7 @@ export default function AddProduct() {
     const [form, setForm] = useState({
         name: "",
         slug: "",
-        brand_id: "",       // <— THÊM
+        brand_id: "",
         category_id: "",
         price_root: "",
         price_sale: "",
@@ -25,7 +25,6 @@ export default function AddProduct() {
     const [loading, setLoading] = useState(false);
     const [err, setErr] = useState("");
 
-    // nạp categories (public)
     useEffect(() => {
         (async () => {
             try {
@@ -64,7 +63,6 @@ export default function AddProduct() {
         setErr("");
 
         try {
-            // kiểm tra brand_id / category_id vì BE yêu cầu
             if (!form.brand_id) throw new Error("Vui lòng nhập brand_id");
             if (!form.category_id) throw new Error("Vui lòng chọn danh mục");
 
@@ -72,7 +70,7 @@ export default function AddProduct() {
             Object.entries(form).forEach(([k, v]) => fd.append(k, v ?? ""));
             if (thumb) fd.append("thumbnail", thumb);
 
-            const token = localStorage.getItem("token") || "";
+            const token = localStorage.getItem("admin_token") || "";
             const res = await fetch(`${API_BASE}/admin/products`, {
                 method: "POST",
                 body: fd,
@@ -87,7 +85,6 @@ export default function AddProduct() {
                 throw new Error(`HTTP ${res.status} - ${t}`);
             }
 
-            // reset nhẹ
             setForm({
                 name: "",
                 slug: "",
@@ -111,6 +108,7 @@ export default function AddProduct() {
             setLoading(false);
         }
     };
+
 
     return (
         <section style={{ padding: 20 }}>
