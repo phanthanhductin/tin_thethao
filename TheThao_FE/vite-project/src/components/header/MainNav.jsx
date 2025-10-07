@@ -14,24 +14,46 @@ export default function MainNav({
         <nav className={`main-nav ${stickBelowTop ? "under-topbar" : ""}`}>
             <style>{`
         /* ---- GIỮ ĐỒNG BỘ VỚI TopBarAuth: --topbar-h:64px ---- */
-        .main-nav{ --black:#000; --hover:#2dd4bf; --topbar-h:64px; }
+        .main-nav{
+          --topbar-h:64px;
+          --accent1:#6366f1; /* tím */
+          --accent2:#06b6d4; /* cyan */
+          --link:#ffffff;
+          --linkHover:rgba(255,255,255,.12);
+          --shadow:0 8px 24px rgba(2,6,23,.22);
+        }
         .mn-wrap{width:min(1200px,92vw); margin:0 auto;}
         .mn{
-          background:var(--black); color:#fff;
-          border-bottom:1px solid #ffffff22; box-shadow:0 2px 10px rgba(0,0,0,.18);
-          margin:0; /* tránh khoảng trắng do margin */
+          position:relative; isolation:isolate;
+          color:#fff; margin:0;
+          box-shadow: var(--shadow);
         }
+        /* Lớp nền gradient loang + bo góc dưới */
+        .mn::before{
+          content:""; position:absolute; inset:0; z-index:-1;
+          background:
+            radial-gradient(130% 160% at -10% -30%, rgba(99,102,241,.35) 0%, rgba(99,102,241,0) 48%),
+            radial-gradient(130% 160% at 110% -20%, rgba(6,182,212,.35) 0%, rgba(6,182,212,0) 50%),
+            linear-gradient(90deg, var(--accent1) 0%, var(--accent2) 100%);
+          border-radius:0 0 18px 18px;
+        }
+
         .mn-row{display:flex; align-items:center; gap:22px; padding:12px 0;}
         .mn-menu{display:flex; list-style:none; margin:0; padding:0; gap:42px; font-weight:900; font-size:18px;}
-        .mn-menu a{color:#fff; text-decoration:none;}
-        .mn-menu a.active{color:#2dd4bf;}
-        .mn-menu a:hover{color:var(--hover);}
-        .mn-hotline{margin-left:auto; font-weight:900; color:#e6e6e6; font-size:18px;}
+        .mn-menu a{
+          color:var(--link); text-decoration:none; padding:6px 10px; border-radius:10px;
+          transition: background .15s ease, transform .15s ease, opacity .15s ease;
+        }
+        .mn-menu a:hover{ background:var(--linkHover); }
+        .mn-menu a.active{
+          background:rgba(255,255,255,.22);
+          box-shadow:0 6px 16px rgba(2,6,23,.18);
+        }
 
-        /* Bám ngay dưới topbar (64px). Nếu vẫn hở 1px do bóng, dùng -1px như dòng dưới */
+        .mn-hotline{margin-left:auto; font-weight:900; color:#f0f9ff; font-size:18px;}
+
+        /* Dính ngay dưới topbar */
         .main-nav.under-topbar{position:sticky; top:var(--topbar-h); z-index:40;}
-        /* Nếu màn bạn vẫn còn thấy một vệt 1px, thay dòng trên bằng dòng dưới:
-           .main-nav.under-topbar{position:sticky; top:calc(var(--topbar-h) - 1px); z-index:40;} */
       `}</style>
 
             <div className="mn">
@@ -40,12 +62,9 @@ export default function MainNav({
                         <li><NavLink to={routes.home} end>Trang chủ</NavLink></li>
                         <li><NavLink to={routes.products}>Sản phẩm</NavLink></li>
                         <li>
-                            <NavLink to="/about" className={({ isActive }) => (isActive ? "nav-active" : undefined)}
-                            >Giới Thiệu
-                            </NavLink>
+                            <NavLink to="/about">Giới Thiệu</NavLink>
                         </li>
-                        <li><NavLink to="/news" className="navlink">Tin tức</NavLink>
-                        </li>
+                        <li><NavLink to="/news">Tin tức</NavLink></li>
                         <li><NavLink to={routes.contact}>Liên hệ</NavLink></li>
                     </ul>
                     <div className="mn-hotline">

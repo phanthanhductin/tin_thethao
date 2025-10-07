@@ -98,42 +98,86 @@ class OrderController extends Controller
     }
 
     // ✅ Dùng id thô, không model binding
-    public function show($id)
-    {
-        $order = Order::with(['details.product:id,thumbnail,name'])
-            ->withSum('details as computed_total', 'amount')
-            ->find($id);
+    // public function show($id)
+    // {
+    //     $order = Order::with(['details.product:id,thumbnail,name'])
+    //         ->withSum('details as computed_total', 'amount')
+    //         ->find($id);
 
-        if (!$order) {
-            return response()->json(['message' => 'Order not found'], 404);
-        }
+    //     if (!$order) {
+    //         return response()->json(['message' => 'Order not found'], 404);
+    //     }
 
-        return response()->json([
-            'id'         => $order->id,
-            'name'       => $order->name,
-            'email'      => $order->email,
-            'phone'      => $order->phone,
-            'address'    => $order->address,
-            'note'       => $order->note,
-            'status'     => (int)($order->status ?? 0),
-            'total'      => (float)($order->total ?? $order->computed_total ?? 0),
-            'created_at' => $order->created_at,
-            'updated_at' => $order->updated_at,
-            'items'      => $order->details->map(function ($d) {
-                $p   = $d->product; // có thể null nếu SP bị xóa
-                $img = $p?->thumbnail_url ?? $p?->thumbnail;
-                return [
-                    'id'            => $d->id,
-                    'product_id'    => $d->product_id,
-                    'product_name'  => $p?->name ?? 'Sản phẩm',
-                    'product_image' => $img,
-                    'price'         => (float)$d->price_buy,
-                    'qty'           => (int)$d->qty,
-                    'subtotal'      => (float)($d->amount ?? $d->price_buy * $d->qty),
-                ];
-            })->values(),
-        ]);
+    //     return response()->json([
+    //         'id'         => $order->id,
+    //         'name'       => $order->name,
+    //         'email'      => $order->email,
+    //         'phone'      => $order->phone,
+    //         'address'    => $order->address,
+    //         'note'       => $order->note,
+    //         'status'     => (int)($order->status ?? 0),
+    //         'total'      => (float)($order->total ?? $order->computed_total ?? 0),
+    //         'created_at' => $order->created_at,
+    //         'updated_at' => $order->updated_at,
+    //         'items'      => $order->details->map(function ($d) {
+    //             $p   = $d->product; // có thể null nếu SP bị xóa
+    //             $img = $p?->thumbnail_url ?? $p?->thumbnail;
+    //             return [
+    //                 'id'            => $d->id,
+    //                 'product_id'    => $d->product_id,
+    //                 'product_name'  => $p?->name ?? 'Sản phẩm',
+    //                 'product_image' => $img,
+    //                 'price'         => (float)$d->price_buy,
+    //                 'qty'           => (int)$d->qty,
+    //                 'subtotal'      => (float)($d->amount ?? $d->price_buy * $d->qty),
+    //             ];
+    //         })->values(),
+    //     ]);
+    // }
+public function show($id)
+{
+    $order = Order::with(['details.product:id,name,thumbnail'])
+        ->withSum('details as computed_total', 'amount')
+        ->find($id);
+
+    if (!$order) {
+        return response()->json(['message' => 'Order not found'], 404);
     }
+
+    // ✅ Chuẩn hóa dữ liệu items
+    $items = $order->details->map(function ($d) {
+        $p = $d->product;
+        $img = $p?->thumbnail_url ?? $p?->thumbnail ?? null;
+
+        return [
+            'id'             => $d->id,
+            'product_id'     => $d->product_id,
+            'name'           => $p?->name ?? $d->product_name ?? 'Sản phẩm',
+            'price'          => (float) $d->price_buy,
+            'qty'            => (int) $d->qty,
+            'thumbnail_url'  => $img,
+            'subtotal'       => (float) ($d->amount ?? $d->price_buy * $d->qty),
+        ];
+    })->values();
+
+    // ✅ Tổng tiền
+    $total = $items->sum(fn($it) => $it['price'] * $it['qty']);
+
+    return response()->json([
+        'id'         => $order->id,
+        'code'       => (string) ($order->code ?? $order->id),
+        'name'       => $order->name,
+        'email'      => $order->email,
+        'phone'      => $order->phone,
+        'address'    => $order->address,
+        'note'       => $order->note,
+        'status'     => (int) ($order->status ?? 0),
+        'total'      => $total,
+        'created_at' => $order->created_at,
+        'updated_at' => $order->updated_at,
+        'items'      => $items,
+    ]);
+}
 
     // 🌟 PUBLIC: /api/orders/track?code=...&phone=...
     public function track(Request $request)
@@ -243,4 +287,78 @@ class OrderController extends Controller
 
         return response()->json(['data' => $data]);
     }
+
+
+    //
+    // ✅ Admin cập nhật trạng thái đơn hàng
+public function update(Request $request, $id)
+{
+    $order = Order::find($id);
+    if (!$order) {
+        return response()->json(['message' => 'Không tìm thấy đơn hàng'], 404);
+    }
+
+    $data = $request->validate([
+        'status' => 'required',
+    ]);
+
+    // Map chuỗi FE -> số trong DB
+    $map = [
+        'pending'   => 0,
+        'confirmed' => 1,
+        'ready'     => 2,
+        'shipping'  => 3,
+        'delivered' => 4,
+        'canceled'  => 5,
+    ];
+
+    $statusValue = $data['status'];
+    if (is_string($statusValue) && isset($map[$statusValue])) {
+        $statusValue = $map[$statusValue];
+    }
+
+    if (!in_array($statusValue, [0,1,2,3,4,5])) {
+        return response()->json(['message' => 'Trạng thái không hợp lệ'], 422);
+    }
+
+    $old = $order->status;
+    $order->status = $statusValue;
+    $order->updated_by = $request->user()->id ?? null;
+    $order->save();
+
+    // Map ngược lại cho FE hiển thị chữ
+    $reverse = array_flip($map);
+
+    return response()->json([
+        'message' => 'Cập nhật trạng thái đơn hàng thành công',
+        'data' => [
+            'id' => $order->id,
+            'status' => $reverse[$order->status] ?? $order->status,
+            'old_status' => $reverse[$old] ?? $old,
+        ],
+    ]);
+}
+// ✅ HỦY ĐƠN HÀNG (Customer hoặc Admin)
+public function cancel($id)
+{
+    $order = Order::find($id);
+
+    if (!$order) {
+        return response()->json(['message' => 'Không tìm thấy đơn hàng'], 404);
+    }
+
+    // Nếu đã giao hoặc đã hủy thì không cho hủy lại
+    if (in_array($order->status, [4, 5]) || in_array($order->status, ['delivered', 'canceled', 'cancelled'])) {
+        return response()->json(['message' => 'Đơn hàng này không thể hủy.'], 400);
+    }
+
+    $order->status = 5; // mã 5 là canceled
+    $order->save();
+
+    return response()->json([
+        'message' => 'Đơn hàng đã được hủy thành công!',
+        'data' => $order
+    ]);
+}
+
 }

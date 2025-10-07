@@ -8,26 +8,33 @@ use Illuminate\Http\Request;
 
 class CategoryController extends Controller
 {
-    // Public: list
+    /* ============================================================
+     |  PUBLIC: Danh sách & Chi tiết
+     * ============================================================ */
+
     public function index()
     {
-        $cats = Category::orderBy('sort_order')->orderByDesc('id')->get();
-        // ❌ Không cần tự gán image_url — đã có accessor trong Model
+        $cats = Category::orderBy('sort_order')
+            ->orderByDesc('id')
+            ->get();
+
         return response()->json($cats);
     }
 
-    // Public: detail
     public function show($id)
     {
         $cat = Category::find($id);
         if (!$cat) {
             return response()->json(['message' => 'Category not found'], 404);
         }
-        // ❌ Không cần thủ công image_url
         return response()->json($cat);
     }
 
-    // Admin: create
+    /* ============================================================
+     |  ADMIN: CRUD chính
+     * ============================================================ */
+
+    // Thêm mới
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -40,12 +47,9 @@ class CategoryController extends Controller
             'status'      => 'nullable|integer|in:0,1',
         ]);
 
-        // Ép kiểu + mặc định
-        $data['parent_id']  = array_key_exists('parent_id', $data) ? (int) $data['parent_id'] : null;
-        $data['sort_order'] = array_key_exists('sort_order', $data) ? (int) $data['sort_order'] : 0;
-        $data['status']     = array_key_exists('status', $data) ? (int) $data['status'] : 1;
-
-        // Nếu DB NOT NULL, set created_by/updated_by
+        $data['parent_id']  = $data['parent_id'] ?? null;
+        $data['sort_order'] = $data['sort_order'] ?? 0;
+        $data['status']     = $data['status'] ?? 1;
         $data['created_by'] = auth()->id() ?? 0;
         $data['updated_by'] = auth()->id() ?? 0;
 
@@ -53,11 +57,11 @@ class CategoryController extends Controller
 
         return response()->json([
             'message'  => 'Thêm danh mục thành công',
-            'category' => $cat, // đã có image_url trong JSON
+            'category' => $cat,
         ], 201);
     }
 
-    // Admin: update
+    // Cập nhật
     public function update(Request $request, $id)
     {
         $cat = Category::find($id);
@@ -75,30 +79,66 @@ class CategoryController extends Controller
             'status'      => 'nullable|integer|in:0,1',
         ]);
 
-        // Ép kiểu nếu có gửi lên
-        if (array_key_exists('parent_id', $data))  $data['parent_id']  = $data['parent_id'] === null ? null : (int) $data['parent_id'];
-        if (array_key_exists('sort_order', $data)) $data['sort_order'] = (int) $data['sort_order'];
-        if (array_key_exists('status', $data))     $data['status']     = (int) $data['status'];
-
+        $data['parent_id']  = $data['parent_id'] ?? null;
+        $data['sort_order'] = $data['sort_order'] ?? 0;
+        $data['status']     = $data['status'] ?? 1;
         $data['updated_by'] = auth()->id() ?? 0;
 
         $cat->update($data);
 
         return response()->json([
             'message'  => 'Cập nhật danh mục thành công',
-            'category' => $cat, // đã có image_url trong JSON
+            'category' => $cat,
         ]);
     }
 
-    // Admin: delete
+    // ✅ Xóa mềm (chuyển vào thùng rác)
     public function destroy($id)
     {
         $cat = Category::find($id);
         if (!$cat) {
-            return response()->json(['message' => 'Category not found'], 404);
+            return response()->json(['message' => 'Không tìm thấy danh mục'], 404);
         }
 
         $cat->delete();
-        return response()->json(['message' => 'Xóa danh mục thành công']);
+        return response()->json(['message' => 'Đã chuyển vào thùng rác.']);
+    }
+
+    /* ============================================================
+     |  ADMIN: Thùng rác (Soft Delete)
+     * ============================================================ */
+
+    // Danh sách trong thùng rác
+    public function trash()
+    {
+        $list = Category::onlyTrashed()
+            ->orderByDesc('deleted_at')
+            ->get();
+
+        return response()->json(['data' => $list]);
+    }
+
+    // Khôi phục từ thùng rác
+    public function restore($id)
+    {
+        $cat = Category::onlyTrashed()->find($id);
+        if (!$cat) {
+            return response()->json(['message' => 'Không tìm thấy danh mục'], 404);
+        }
+
+        $cat->restore();
+        return response()->json(['message' => 'Đã khôi phục danh mục.']);
+    }
+
+    // Xóa vĩnh viễn
+    public function forceDelete($id)
+    {
+        $cat = Category::onlyTrashed()->find($id);
+        if (!$cat) {
+            return response()->json(['message' => 'Không tìm thấy danh mục'], 404);
+        }
+
+        $cat->forceDelete();
+        return response()->json(['message' => 'Đã xóa vĩnh viễn danh mục.']);
     }
 }

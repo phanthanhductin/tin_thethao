@@ -156,6 +156,7 @@ class ProductController extends Controller
                 // ✅ bổ sung 2 trường tồn kho
                 'qty',
                 'status',
+                
             ])
             ->find($id);
 
@@ -199,21 +200,43 @@ class ProductController extends Controller
     }
 
     // ⭐ Admin - xem chi tiết sản phẩm
-    public function adminShow($id)
-    {
-        $p = Product::with('brand:id,name')
-            ->select([
-                'id','name','slug','brand_id','category_id',
-                'price_root','price_sale','qty',
-                'detail','description','status','thumbnail'
-            ])
-            ->find($id);
+// ⭐ Admin - xem chi tiết sản phẩm
+public function adminShow($id)
+{
+    $p = Product::with('brand:id,name')
+        ->select([
+            'id',
+            'name',
+            'slug',
+            'brand_id',
+            'category_id',
+            'price_root',
+            'price_sale',
+            'qty',
+            'status',
+            'thumbnail',
+            'detail',
+            'description',
+            'created_at',
+            'updated_at'
+        ])
+        ->find($id);
 
-        if (!$p) return response()->json(['message' => 'Not found'], 404);
-
-        $p = $this->withThumbUrl($p);
-        return $p;
+    if (!$p) {
+        return response()->json(['message' => 'Product not found'], 404);
     }
+
+    // ✅ Bổ sung thumbnail_url
+    $p = $this->withThumbUrl($p);
+
+    return response()->json([
+        'message' => 'OK',
+        'data' => $p
+    ]);
+}
+
+
+
 
     public function store(Request $request)
     {
@@ -290,15 +313,38 @@ class ProductController extends Controller
     }
 
     public function destroy($id)
-    {
-        $product = Product::find($id);
-        if (!$product) return response()->json(['message' => 'Not found'], 404);
+{
+    $product = Product::find($id);
+    if (!$product) return response()->json(['message' => 'Not found'], 404);
 
-        if ($product->thumbnail) {
-            Storage::disk('public')->delete($product->thumbnail);
-        }
+    $product->delete(); // ✅ chỉ soft delete
+    return response()->json(['message' => 'Đã chuyển sản phẩm vào thùng rác']);
+}
+// ✅ Lấy danh sách trong thùng rác
+public function trash()
+{
+    $trash = Product::onlyTrashed()->orderByDesc('deleted_at')->get();
+    $trash->transform(fn($p) => $this->withThumbUrl($p));
+    return response()->json(['data' => $trash]);
+}
 
-        $product->delete();
-        return response()->json(['message' => 'Đã xóa sản phẩm']);
-    }
+// ✅ Khôi phục sản phẩm
+public function restore($id)
+{
+    $p = Product::onlyTrashed()->find($id);
+    if (!$p) return response()->json(['message' => 'Không tìm thấy sản phẩm trong thùng rác'], 404);
+    $p->restore();
+    return response()->json(['message' => 'Đã khôi phục sản phẩm!']);
+}
+
+// ✅ Xóa vĩnh viễn
+public function forceDelete($id)
+{
+    $p = Product::onlyTrashed()->find($id);
+    if (!$p) return response()->json(['message' => 'Không tìm thấy sản phẩm trong thùng rác'], 404);
+    if ($p->thumbnail) Storage::disk('public')->delete($p->thumbnail);
+    $p->forceDelete();
+    return response()->json(['message' => 'Đã xoá vĩnh viễn sản phẩm!']);
+}
+
 }

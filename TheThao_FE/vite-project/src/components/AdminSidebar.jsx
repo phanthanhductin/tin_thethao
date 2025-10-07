@@ -34,17 +34,25 @@ export default function AdminSidebar() {
           Dashboard
         </NavLink>
         <NavLink to="/admin/products" style={linkStyle}>
-          Products
+          Quản Lý Sản Phẩm
         </NavLink>
         <NavLink to="/admin/categories" style={linkStyle}>
-          Categories
+          Quản Lý Danh Mục
         </NavLink>
         <NavLink to="/admin/orders" style={linkStyle}>
-          Orders
+          Quản Lý Đơn Hàng
+        </NavLink>
+        <NavLink to="/admin/posts" style={linkStyle}>
+          Quản Lý Bài Viết
+        </NavLink>
+        <NavLink to="/admin/contacts" style={linkStyle}>
+          Quản Lý Liên Hệ
         </NavLink>
         <NavLink to="/admin/users" style={linkStyle}>
-          Users
+          Quản Lý Người Dùng
         </NavLink>
+
+
       </nav>
     </div>
   );

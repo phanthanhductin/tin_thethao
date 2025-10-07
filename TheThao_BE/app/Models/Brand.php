@@ -6,9 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class Brand extends Model
 {
-    protected $table = 'ptdt_brand';   // đổi đúng tên bảng của bạn
-    public $timestamps = false;
-    protected $fillable = ['name', 'slug', 'image'];
+    protected $table = 'ptdt_brand';
+    protected $fillable = ['name','slug','logo','status'];
+
+    public function products()
+    {
+        return $this->hasMany(Product::class, 'brand_id');
+    }
 }
-
-

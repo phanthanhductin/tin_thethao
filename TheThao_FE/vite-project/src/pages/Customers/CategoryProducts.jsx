@@ -1,93 +1,125 @@
+// src/pages/Customers/CategoryProducts.jsx
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import ProductCardHome from "../../components/ProductCardHome";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = "http://127.0.0.1:8000/api";
 const PLACEHOLDER = "https://placehold.co/300x200?text=No+Image";
-const VND = new Intl.NumberFormat("vi-VN");
+const HEADER_OFFSET = 110;
 
-export default function CategoryProducts({ addToCart }) {
-  const { id } = useParams(); // category id từ URL
+/* Helpers giống Products.jsx */
+const toNum = (x) => {
+  if (x == null || x === "") return 0;
+  if (typeof x === "string") return Number(x.replace(/[^\d.-]/g, "")) || 0;
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+};
+const getPrice = (p) =>
+  toNum(p.price_sale ?? p.sale_price ?? p.price ?? p.price_buy ?? p.amount);
+const getRootPrice = (p) =>
+  toNum(p.price_root ?? p.original_price ?? p.root_price);
+
+export default function CategoryProducts() {
+  const { id } = useParams();
   const [items, setItems] = useState([]);
-  const [cat, setCat] = useState(null); // thông tin danh mục
+  const [cat, setCat] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     const ac = new AbortController();
-
     (async () => {
       try {
         setLoading(true);
         setErr("");
 
-        // lấy thông tin danh mục
-        const resCat = await fetch(`${API_BASE}/categories/${id}`, {
-          signal: ac.signal,
-        });
+        // 1) Thông tin danh mục
+        const resCat = await fetch(`${API_BASE}/categories/${id}`, { signal: ac.signal });
         if (!resCat.ok) throw new Error(`HTTP ${resCat.status}`);
-        const catData = await resCat.json();
-        setCat(catData);
-
-        // lấy sản phẩm thuộc danh mục
-        const resProds = await fetch(`${API_BASE}/categories/${id}/products`, {
-          signal: ac.signal,
+        const catJson = await resCat.json().catch(() => ({}));
+        const c = Array.isArray(catJson) ? catJson[0] : catJson?.data ?? catJson;
+        setCat({
+          id: c?.id,
+          name: c?.name || c?.title || `Danh mục #${id}`,
+          description: c?.description || c?.desc || "",
         });
+
+        // 2) Sản phẩm (đồng bộ shape với trang Products)
+        const qs = new URLSearchParams({
+          category_id: id,
+          sort: "created_at:desc",
+          per_page: "120",
+        }).toString();
+        const resProds = await fetch(`${API_BASE}/products?${qs}`, { signal: ac.signal });
         if (!resProds.ok) throw new Error(`HTTP ${resProds.status}`);
 
-        const data = await resProds.json();
+        const data = await resProds.json().catch(() => ({}));
         const list = Array.isArray(data) ? data : data?.data ?? [];
-        setItems(list);
+
+        // Chuẩn hoá cho ProductCardHome
+        const normalized = list.map((p) => {
+          const base = getRootPrice(p);
+          const sale = getPrice(p);
+          const price = sale || base || 0;
+          const image = p.thumbnail_url || p.thumbnail || PLACEHOLDER;
+
+          return {
+            ...p,
+            image,
+            // set đủ các alias để card nào cũng đọc được
+            price,                       // chính
+            price_buy: price,
+            amount: price,
+            price_sale: sale || undefined,
+            sale_price: sale || undefined,
+            price_root: base || undefined,
+            root_price: base || undefined,
+            original_price: base || undefined,
+          };
+        });
+
+        setItems(normalized);
       } catch (e) {
         if (e.name !== "AbortError") {
-          console.error("Lỗi:", e);
+          console.error(e);
           setErr("Không tải được sản phẩm hoặc danh mục.");
         }
       } finally {
         setLoading(false);
       }
     })();
-
     return () => ac.abort();
   }, [id]);
 
-  if (loading) return <p style={{ padding: 20, color: "#00e676" }}>Đang tải...</p>;
-  if (err) return <p style={{ padding: 20, color: "#ff5252" }}>{err}</p>;
+  if (loading)
+    return <p style={{ padding: 20, color: "#2563eb", textAlign: "center" }}>Đang tải...</p>;
+  if (err)
+    return <p style={{ padding: 20, color: "#d32f2f", textAlign: "center" }}>{err}</p>;
 
   return (
     <div
       style={{
-        padding: 20,
+        padding: `${HEADER_OFFSET}px 20px 40px`,
         fontFamily: "Montserrat, Arial, sans-serif",
-        background: "#121212",
-        color: "#f5f5f5",
-        minHeight: "100vh",
+        background: "#f8fafc",
+        color: "#0b1220",
       }}
     >
-      {/* Tiêu đề + ảnh danh mục */}
-      {cat && (
-        <div style={{ marginBottom: 24, textAlign: "center" }}>
-          <h2
-            style={{
-              marginBottom: 12,
-              fontSize: 28,
-              fontWeight: 800,
-              color: "#00e676",
-              textTransform: "uppercase",
-              textShadow: "0 0 10px rgba(0,230,118,0.6)",
-            }}
-          >
-            {cat.name}
-          </h2>
-        </div>
-      )}
+      <StyleTag />
 
-      <p style={{ marginBottom: 16, textAlign: "center" }}>
+      <header style={{ textAlign: "center", marginBottom: 8 }}>
+        <h2 className="products-title">{cat?.name || "Danh mục"}</h2>
+        <p style={{ margin: "6px auto 0", maxWidth: 820, color: "#334155", fontWeight: 700 }}>
+          {cat?.description || "Khám phá các sản phẩm trong danh mục."}
+        </p>
+      </header>
+
+      <p style={{ textAlign: "center", margin: "12px 0 18px" }}>
         <Link
           to="/products"
           style={{
-            color: "#00e5ff",
-            fontWeight: 600,
-            textDecoration: "none",
+            color: "#2563eb", fontWeight: 800, textDecoration: "none",
+            border: "1px solid rgba(37,99,235,.25)", padding: "8px 12px", borderRadius: 10
           }}
         >
           ← Xem tất cả sản phẩm
@@ -95,121 +127,49 @@ export default function CategoryProducts({ addToCart }) {
       </p>
 
       {items.length === 0 ? (
-        <p style={{ textAlign: "center", color: "#aaa" }}>Không có sản phẩm.</p>
+        <p style={{ padding: 20, textAlign: "center", color: "#475569", fontWeight: 700 }}>
+          Không có sản phẩm trong danh mục này.
+        </p>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-            gap: 24,
-          }}
-        >
-          {items.map((p) => {
-            const price = Number(p.price ?? 0);
-            const img =
-              p.thumbnail_url || p.image_url || p.thumbnail || p.image || PLACEHOLDER;
-
-            return (
-              <div
-                key={p.id}
-                style={{
-                  background: "#1e1e1e",
-                  borderRadius: 12,
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.4)",
-                  padding: 16,
-                  textAlign: "center",
-                  transition: "transform .2s ease, box-shadow .2s ease",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-5px)";
-                  e.currentTarget.style.boxShadow =
-                    "0 6px 16px rgba(0,229,255,0.5)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow =
-                    "0 2px 10px rgba(0,0,0,0.4)";
-                }}
-              >
-                <Link
-                  to={`/products/${p.id}`}
-                  style={{ textDecoration: "none", color: "inherit" }}
-                >
-                  <div
-                    style={{
-                      height: 140,
-                      borderRadius: 8,
-                      overflow: "hidden",
-                      marginBottom: 10,
-                      background: "#2a2a2a",
-                    }}
-                  >
-                    <img
-                      src={img}
-                      alt={p.name}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                      }}
-                      onError={(e) => (e.currentTarget.src = PLACEHOLDER)}
-                      loading="lazy"
-                    />
-                  </div>
-                  <h3
-                    style={{
-                      fontSize: 18,
-                      fontWeight: 600,
-                      marginBottom: 6,
-                      color: "#fff",
-                    }}
-                  >
-                    {p.name}
-                  </h3>
-                </Link>
-
-                <div
-                  style={{
-                    fontWeight: 700,
-                    color: "#ff7043",
-                    marginTop: 6,
-                  }}
-                >
-                  {price > 0 ? `${VND.format(price)} đ` : "Liên hệ"}
-                </div>
-
-                {typeof addToCart === "function" && (
-                  <button
-                    onClick={() => addToCart(p)}
-                    style={{
-                      marginTop: 12,
-                      background: "linear-gradient(90deg,#00c853,#ff6d00)",
-                      color: "#fff",
-                      border: 0,
-                      padding: "8px 14px",
-                      borderRadius: 20,
-                      cursor: "pointer",
-                      fontWeight: 600,
-                      transition: "transform .2s ease, box-shadow .2s ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "scale(1.05)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 12px rgba(255,109,0,0.6)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "scale(1)";
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
-                  >
-                    + Thêm vào giỏ
-                  </button>
-                )}
-              </div>
-            );
-          })}
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div className="grid4">
+            {items.map((p) => (
+              <ProductCardHome key={p.id} p={p} />
+            ))}
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+/* Style đồng bộ */
+function StyleTag() {
+  return (
+    <style>{`
+      .products-title{
+        font-size: clamp(28px, 4.2vw, 44px);
+        font-weight: 1000;
+        line-height: 1.1;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        margin: 6px auto 22px;
+        padding-bottom: 14px;
+        display: inline-flex; gap: 12px; position: relative;
+        color: #0f172a;
+        background: linear-gradient(180deg,#0b1220 0%,#121a2e 70%,#1f2937 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        text-shadow: 0 1px 0 #000000ff, 0 2px 6px rgba(13,24,54,.18);
+      }
+      .products-title::after{
+        content:""; position:absolute; left:0; bottom:0; width:100%; height:4px; border-radius:6px;
+        background: linear-gradient(90deg,#6366f1 0%, #8b5cf6 75%, rgba(99,102,241,0) 100%);
+        box-shadow: 0 1px 8px rgba(99,102,241,.35);
+      }
+      .grid4{ display:grid; grid-template-columns:repeat(4,1fr); gap:20px; align-items:stretch; }
+      @media (max-width:1024px){ .grid4{ grid-template-columns:repeat(3,1fr); } }
+      @media (max-width:768px){ .grid4{ grid-template-columns:repeat(2,1fr); } }
+      @media (max-width:480px){ .grid4{ grid-template-columns:1fr; } }
+    `}</style>
   );
 }

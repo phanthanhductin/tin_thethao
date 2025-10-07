@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// src/pages/Admin/Product/edit.jsx
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 const API_BASE = "http://127.0.0.1:8000/api";
@@ -6,6 +7,7 @@ const API_BASE = "http://127.0.0.1:8000/api";
 export default function EditProduct() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const token = useMemo(() => localStorage.getItem("admin_token") || "", []);
 
     const [form, setForm] = useState({
         name: "",
@@ -18,18 +20,38 @@ export default function EditProduct() {
         detail: "",
         description: "",
         status: 1,
-        thumbnail: null,
+        thumbnail: null, // file
     });
+
     const [preview, setPreview] = useState(null);
+    const [categories, setCategories] = useState([]);
+    const [brands, setBrands] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
+    // load brands + categories
+    useEffect(() => {
+        (async () => {
+            try {
+                const [rc, rb] = await Promise.all([
+                    fetch(`${API_BASE}/categories`),
+                    fetch(`${API_BASE}/brands?status=active`),
+                ]);
+                const jc = await rc.json().catch(() => ({}));
+                const jb = await rb.json().catch(() => ({}));
+                setCategories(Array.isArray(jc) ? jc : jc.data ?? []);
+                setBrands(Array.isArray(jb) ? jb : jb.data ?? []);
+            } catch (e) {
+                console.error(e);
+            }
+        })();
+    }, []);
+
+    // load product
     useEffect(() => {
         const fetchProduct = async () => {
             try {
-                const token = localStorage.getItem("admin_token");
-
                 const res = await fetch(`${API_BASE}/admin/products/${id}`, {
                     headers: {
                         Accept: "application/json",
@@ -37,22 +59,22 @@ export default function EditProduct() {
                     },
                 });
                 if (!res.ok) {
-                    if (res.status === 401) throw new Error("Bạn chưa đăng nhập hoặc token hết hạn");
+                    if (res.status === 401)
+                        throw new Error("Bạn chưa đăng nhập hoặc token hết hạn");
                     throw new Error("Không lấy được dữ liệu sản phẩm");
                 }
-
                 const data = await res.json();
                 setForm((prev) => ({
                     ...prev,
                     name: data.name || "",
                     slug: data.slug || "",
-                    brand_id: data.brand_id || "",
-                    category_id: data.category_id || "",
-                    price_root: data.price_root || "",
-                    price_sale: data.price_sale || "",
-                    qty: data.qty || "",
-                    detail: data.detail || "",
-                    description: data.description || "",
+                    brand_id: data.brand_id ?? "",
+                    category_id: data.category_id ?? "",
+                    price_root: data.price_root ?? "",
+                    price_sale: data.price_sale ?? "",
+                    qty: data.qty ?? "",
+                    detail: data.detail ?? "",
+                    description: data.description ?? "",
                     status: data.status ?? 1,
                     thumbnail: null,
                 }));
@@ -62,19 +84,27 @@ export default function EditProduct() {
                 setError(err.message || "Không tải được dữ liệu sản phẩm");
             }
         };
-
         fetchProduct();
-    }, [id]);
+    }, [id, token]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         setForm((s) => ({ ...s, [name]: value }));
+        if (name === "name" && !form.slug) {
+            const slug = value
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/(^-|-$)/g, "");
+            setForm((s) => ({ ...s, slug }));
+        }
     };
 
     const handleFile = (e) => {
-        const file = e.target.files[0];
-        setForm((s) => ({ ...s, thumbnail: file }));
-        if (file) setPreview(URL.createObjectURL(file));
+        const file = e.target.files?.[0];
+        setForm((s) => ({ ...s, thumbnail: file || null }));
+        setPreview(file ? URL.createObjectURL(file) : preview);
     };
 
     const handleSubmit = async (e) => {
@@ -84,11 +114,23 @@ export default function EditProduct() {
         setSuccess("");
 
         try {
-            const token = localStorage.getItem("admin_token");
-
             const fd = new FormData();
-            Object.entries(form).forEach(([k, v]) => {
-                if (v !== null && v !== "") fd.append(k, v);
+
+            // chỉ append field có giá trị (tránh override null)
+            const payload = {
+                ...form,
+                status: String(form.status) === "0" ? 0 : 1,
+            };
+
+            Object.entries(payload).forEach(([k, v]) => {
+                if (v !== null && v !== "") {
+                    // BE nhận file "thumbnail"
+                    if (k === "thumbnail" && v) {
+                        fd.append("thumbnail", v);
+                    } else {
+                        fd.append(k, v);
+                    }
+                }
             });
             fd.append("_method", "PUT");
 
@@ -105,7 +147,7 @@ export default function EditProduct() {
             if (!res.ok) throw new Error(data.message || "Cập nhật thất bại");
 
             setSuccess("Cập nhật sản phẩm thành công!");
-            setTimeout(() => navigate("/admin/products"), 1200);
+            setTimeout(() => navigate("/admin/products"), 900);
         } catch (err) {
             console.error(err);
             setError(err.message || "Có lỗi xảy ra");
@@ -134,7 +176,6 @@ export default function EditProduct() {
                 {success && <p style={{ color: "green", marginBottom: 12 }}>{success}</p>}
 
                 <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
-                    {/* Lưới 2 cột giống AddProduct */}
                     <div
                         style={{
                             display: "grid",
@@ -176,38 +217,52 @@ export default function EditProduct() {
                             />
                         </label>
 
+                        {/* Brand select */}
                         <label style={{ display: "grid", gap: 6 }}>
-                            <span>Brand ID</span>
-                            <input
-                                type="number"
+                            <span>Thương hiệu</span>
+                            <select
                                 name="brand_id"
-                                value={form.brand_id}
+                                value={form.brand_id ?? ""}
                                 onChange={handleChange}
-                                min="1"
+                                required
                                 style={{
                                     height: 36,
                                     padding: "0 10px",
                                     border: "1px solid #ddd",
                                     borderRadius: 8,
                                 }}
-                            />
+                            >
+                                <option value="">-- chọn thương hiệu --</option>
+                                {brands.map((b) => (
+                                    <option key={b.id} value={b.id}>
+                                        {b.name}
+                                    </option>
+                                ))}
+                            </select>
                         </label>
 
+                        {/* Category select */}
                         <label style={{ display: "grid", gap: 6 }}>
-                            <span>Category ID</span>
-                            <input
-                                type="number"
+                            <span>Danh mục</span>
+                            <select
                                 name="category_id"
-                                value={form.category_id}
+                                value={form.category_id ?? ""}
                                 onChange={handleChange}
-                                min="1"
+                                required
                                 style={{
                                     height: 36,
                                     padding: "0 10px",
                                     border: "1px solid #ddd",
                                     borderRadius: 8,
                                 }}
-                            />
+                            >
+                                <option value="">-- chọn danh mục --</option>
+                                {categories.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name}
+                                    </option>
+                                ))}
+                            </select>
                         </label>
 
                         <label style={{ display: "grid", gap: 6 }}>
@@ -284,7 +339,6 @@ export default function EditProduct() {
                             <input type="file" accept="image/*" onChange={handleFile} />
                         </label>
 
-                        {/* Ô trống để lấp grid 2 cột (giữ bố cục đẹp) */}
                         <div />
                     </div>
 

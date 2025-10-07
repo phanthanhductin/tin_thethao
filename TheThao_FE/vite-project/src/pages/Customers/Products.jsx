@@ -16,8 +16,10 @@ const toNum = (x) => {
 };
 const getName = (p) => p.name || p.title || `Sản phẩm #${p.id}`;
 const getCreatedTs = (p) => new Date(p.created_at || p.updated_at || 0).getTime();
-const getPrice = (p) => toNum(p.price_sale ?? p.sale_price ?? p.price ?? p.price_buy ?? p.amount);
-const getRootPrice = (p) => toNum(p.price_root ?? p.original_price ?? p.root_price);
+const getPrice = (p) =>
+  toNum(p.price_sale ?? p.sale_price ?? p.price ?? p.price_buy ?? p.amount);
+const getRootPrice = (p) =>
+  toNum(p.price_root ?? p.original_price ?? p.root_price);
 const getCategoryId = (p) => {
   if (p.category_id != null) return String(p.category_id);
   if (p.categoryId != null) return String(p.categoryId);
@@ -44,12 +46,14 @@ function applyClientFilterAndSort(list, f) {
   }
 
   // category
-  if (f.category_id) arr = arr.filter((p) => getCategoryId(p) === String(f.category_id));
+  if (f.category_id)
+    arr = arr.filter((p) => getCategoryId(p) === String(f.category_id));
 
   // sale only
   if (f.only_sale) {
     arr = arr.filter((p) => {
-      const price = getPrice(p), root = getRootPrice(p);
+      const price = getPrice(p),
+        root = getRootPrice(p);
       return root && price && price < root;
     });
   }
@@ -66,29 +70,34 @@ function applyClientFilterAndSort(list, f) {
   const collator = new Intl.Collator("vi", { sensitivity: "base" });
   if (by === "price-asc") arr.sort((a, b) => getPrice(a) - getPrice(b));
   else if (by === "price-desc") arr.sort((a, b) => getPrice(b) - getPrice(a));
-  else if (by === "name-asc") arr.sort((a, b) => collator.compare(getName(a), getName(b)));
-  else if (by === "name-desc") arr.sort((a, b) => collator.compare(getName(b), getName(a)));
+  else if (by === "name-asc")
+    arr.sort((a, b) => collator.compare(getName(a), getName(b)));
+  else if (by === "name-desc")
+    arr.sort((a, b) => collator.compare(getName(b), getName(a)));
   else arr.sort((a, b) => getCreatedTs(b) - getCreatedTs(a));
   return arr;
 }
 
 function useDebounce(value, delay = 400) {
   const [v, setV] = useState(value);
-  useEffect(() => { const t = setTimeout(() => setV(value), delay); return () => clearTimeout(t); }, [value, delay]);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
   return v;
 }
 
 /* ✅ build query để gọi server-side filter */
 function buildQuery(f) {
   const q = new URLSearchParams();
-  if (f.q) q.set("keyword", f.q);              // server đọc keyword|q
+  if (f.q) q.set("keyword", f.q); // server đọc keyword|q
   if (f.category_id) q.set("category_id", f.category_id);
   if (f.min_price) q.set("min_price", f.min_price);
   if (f.max_price) q.set("max_price", f.max_price);
   if (f.only_sale) q.set("only_sale", "1");
   if (f.in_stock) q.set("in_stock", "1");
   const map = {
-    "newest": "created_at:desc",
+    newest: "created_at:desc",
     "price-asc": "price:asc",
     "price-desc": "price:desc",
     "name-asc": "name:asc",
@@ -144,7 +153,9 @@ export default function Products() {
         const res = await fetch(`${API_BASE}/categories`, { signal: ac.signal });
         const data = await res.json().catch(() => ({}));
         const list = Array.isArray(data) ? data : data?.data ?? [];
-        setCategories(list.map((c) => ({ id: c.id, name: c.name || c.title || `Danh mục ${c.id}` })));
+        setCategories(
+          list.map((c) => ({ id: c.id, name: c.name || c.title || `Danh mục ${c.id}` }))
+        );
       } catch {
         setCategories([]);
       }
@@ -162,19 +173,25 @@ export default function Products() {
 
         // 1) Dữ liệu đã lọc theo server
         const qs = buildQuery(debounced);
-        const res = await fetch(`${API_BASE}/products${qs ? "?" + qs : ""}`, { signal: ac.signal });
+        const res = await fetch(
+          `${API_BASE}/products${qs ? "?" + qs : ""}`,
+          { signal: ac.signal }
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const list = Array.isArray(data) ? data : data?.data ?? [];
         setItems(applyClientFilterAndSort(list, debounced)); // fallback client
 
         // 2) Lấy một bản "all" để tính gợi ý/related (lấy ít nhiều tuỳ ý)
-        const resAll = await fetch(`${API_BASE}/products?per_page=200`, { signal: ac.signal });
+        const resAll = await fetch(`${API_BASE}/products?per_page=200`, {
+          signal: ac.signal,
+        });
         const dataAll = await resAll.json().catch(() => ({}));
         const listAll = Array.isArray(dataAll) ? dataAll : dataAll?.data ?? [];
         setAll(listAll);
       } catch (e) {
-        if (e.name !== "AbortError") setErr("Không tải được danh sách sản phẩm.");
+        if (e.name !== "AbortError")
+          setErr("Không tải được danh sách sản phẩm.");
       } finally {
         setLoading(false);
       }
@@ -203,7 +220,9 @@ export default function Products() {
 
     // ưu tiên theo danh mục hiện tại nếu có
     if (filter.category_id) {
-      pool = all.filter((p) => getCategoryId(p) === String(filter.category_id));
+      pool = all.filter(
+        (p) => getCategoryId(p) === String(filter.category_id)
+      );
     }
 
     // loại trừ những sp đang hiển thị ở list
@@ -211,7 +230,10 @@ export default function Products() {
 
     // fallback nếu quá ít
     if (suggestion.length < 4) {
-      const plus = all.filter((p) => !exclude.has(p.id) && !suggestion.find((s) => s.id === p.id));
+      const plus = all.filter(
+        (p) =>
+          !exclude.has(p.id) && !suggestion.find((s) => s.id === p.id)
+      );
       suggestion = suggestion.concat(plus);
     }
     // sắp xếp mới nhất
@@ -221,25 +243,41 @@ export default function Products() {
 
   /* ======= UI states ======= */
   if (loading && items.length === 0)
-    return <p style={{ padding: 20, textAlign: "center", color: "#00e676" }}>Đang tải sản phẩm...</p>;
+    return (
+      <p style={{ padding: 20, textAlign: "center", color: "#2563eb" }}>
+        Đang tải sản phẩm...
+      </p>
+    );
   if (err)
-    return <p style={{ padding: 20, textAlign: "center", color: "#ff5252" }}>{err}</p>;
+    return (
+      <p style={{ padding: 20, textAlign: "center", color: "#d32f2f" }}>
+        {err}
+      </p>
+    );
 
   return (
     <div
+      className="products-page"
       style={{
         padding: `${HEADER_OFFSET}px 20px 40px`,
         fontFamily: "Montserrat, Arial, sans-serif",
-        background: "#121212",
-        color: "#f5f5f5",
-        minHeight: "100vh",
+        background: "#f8fafc",     // NỀN SÁNG
+        color: "#0b1220",          // CHỮ ĐẬM
       }}
     >
       <StyleTag />
 
-      <h2 className="products-title">🏆 TẤT CẢ SẢN PHẨM</h2>
+      <h2 className="products-title">TẤT CẢ SẢN PHẨM</h2>
       {filter.q ? (
-        <p style={{ textAlign: "center", marginTop: -6, marginBottom: 8, opacity: .9 }}>
+        <p
+          style={{
+            textAlign: "center",
+            marginTop: -6,
+            marginBottom: 8,
+            color: "#334155",
+            fontWeight: 700,
+          }}
+        >
           Kết quả cho: <strong>{filter.q}</strong>
         </p>
       ) : null}
@@ -255,7 +293,16 @@ export default function Products() {
 
       {/* Lưới sản phẩm (4 cột giống Home) */}
       {items.length === 0 ? (
-        <p style={{ padding: 20, textAlign: "center", color: "#aaa" }}>Không có sản phẩm phù hợp bộ lọc.</p>
+        <p
+          style={{
+            padding: 20,
+            textAlign: "center",
+            color: "#475569",
+            fontWeight: 700,
+          }}
+        >
+          Không có sản phẩm phù hợp bộ lọc.
+        </p>
       ) : (
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div className="grid4">
@@ -275,12 +322,12 @@ export default function Products() {
           <h3
             style={{
               textAlign: "center",
-              color: "#B388FF",
+              color: "#6366f1",
               fontSize: 22,
-              fontWeight: 800,
+              fontWeight: 900,
               textTransform: "uppercase",
-              textShadow: "0 0 8px rgba(179,136,255,.5)",
-              borderBottom: "3px solid #B388FF",
+              textShadow: "0 1px 0 #fff, 0 0 14px rgba(99,102,241,.28)", // nổi chữ
+              borderBottom: "3px solid #6366f1",
               display: "inline-block",
               paddingBottom: 6,
               margin: "0 auto 16px",
@@ -305,7 +352,11 @@ export default function Products() {
       <p style={{ marginTop: 40, textAlign: "center" }}>
         <Link
           to="/"
-          style={{ color: "#00e676", fontWeight: 600, textDecoration: "none" }}
+          style={{
+            color: "#2563eb",
+            fontWeight: 800,
+            textDecoration: "none",
+          }}
         >
           ← Về trang chủ
         </Link>
@@ -337,7 +388,9 @@ function FilterBar({ filter, setFilter, categories, loading, onClear }) {
         >
           <option value="">— Tất cả —</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
           ))}
         </select>
       </div>
@@ -395,31 +448,76 @@ function FilterBar({ filter, setFilter, categories, loading, onClear }) {
           <span>Chỉ còn hàng</span>
         </label>
 
-        <button className="btn-clear" onClick={onClear}>Xoá lọc</button>
+        <button className="btn-clear" onClick={onClear}>
+          Xoá lọc
+        </button>
       </div>
     </div>
   );
 }
 
-/* ===== Styles ===== */
+/* ===== Styles (sáng – nổi, đồng bộ Liên hệ) ===== */
 function StyleTag() {
   return (
     <style>{`
-      .products-title{
-        font-size:28px; font-weight:900; margin:0 auto 20px; text-align:center;
-        color:#00e5ff; text-transform:uppercase; letter-spacing:1px;
-        text-shadow:0 0 10px rgba(0,229,255,.6);
-        border-bottom:3px solid #00e5ff; display:inline-block; padding-bottom:6px;
-      }
+     .products-title{
+  /* kích thước to – đậm */
+  font-size: clamp(28px, 4.2vw, 44px);
+  font-weight: 1000;
+  line-height: 1.1;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+
+  /* bố cục */
+  margin: 6px auto 22px;
+  padding-bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+
+  /* hiệu ứng chữ đậm – nổi (đổ bóng + gradient fill) */
+  color: color:#0f172a;                   /* fallback */
+  background: linear-gradient(180deg,#0b1220 0%,#121a2e 70%,#1f2937 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+
+  /* viền sáng nhẹ để dễ đọc trên nền sáng */
+  text-shadow:
+    0 1px 0 #000000ff,
+    0 2px 6px rgba(13, 24, 54, .18);
+}
+
+/* gạch chân tím */
+.products-title::after{
+  content:"";
+  position:absolute;
+  left:0; bottom:0;
+  width:100%;
+  height:4px;
+  background: linear-gradient(90deg,#6366f1 0%, #8b5cf6 75%, rgba(99,102,241,0) 100%);
+  border-radius: 6px;
+  box-shadow: 0 1px 8px rgba(99,102,241,.35);
+}
+
+/* kích thước cup */
+.products-title .cup{
+  font-size: clamp(26px, 4vw, 34px);
+  filter: drop-shadow(0 1px 0 #fff) drop-shadow(0 2px 6px rgba(0,0,0,.12));
+}
+
+
       .filter-wrap{
         display:grid; grid-template-columns:repeat(12,1fr); gap:14px;
-        margin:22px auto 26px; padding:14px; border-radius:14px;
-        background:#1a1a1a; border:1px solid rgba(0,229,255,.25);
-        box-shadow:0 0 12px rgba(0,229,255,.1);
+        margin:22px auto 26px; padding:14px; border-radius:16px;
+        background:#ffffff; 
+        border:1px solid rgba(2,6,23,.08);
+        box-shadow:0 6px 18px rgba(2,6,23,.06);
         max-width:1200px;
       }
       .filter-wrap.is-loading{ opacity:.7; pointer-events:none; }
       .field{ grid-column: span 12; }
+
       @media (min-width: 768px){
         .field:nth-child(1){ grid-column: span 4; }
         .field:nth-child(2){ grid-column: span 3; }
@@ -427,27 +525,37 @@ function StyleTag() {
         .field:nth-child(4){ grid-column: span 2; }
         .field.toggles{ grid-column: span 12; }
       }
-      .field > label{ display:block; color:#9adfff; font-size:13px; margin-bottom:6px; opacity:.9 }
+
+      .field > label{
+        display:block; color:#0f172a; font-size:13px; margin-bottom:6px;
+        font-weight:800;
+      }
+
       .field input[type="text"],
       .field input[type="number"],
       .field select{
-        width:100%; padding:10px 12px; border-radius:10px;
-        border:1px solid rgba(255,255,255,.15); background:#101010; color:#f5f5f5;
+        width:100%; padding:10px 12px; border-radius:12px;
+        border:1px solid #e2e8f0; background:#fff; color:#0b1220;
         outline:none; transition: box-shadow .15s ease, border-color .15s ease;
       }
+      .field input::placeholder{ color:#94a3b8; }
       .field input:focus, .field select:focus{
-        border-color:#00e5ff; box-shadow:0 0 0 3px rgba(0,229,255,.2);
+        border-color:#6366f1; box-shadow:0 0 0 4px rgba(99,102,241,.15);
       }
+
       .row-2{ display:flex; gap:10px; }
       .row-2 > *{ flex:1; }
+
       .field.toggles{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-top:2px; }
-      .ck{ display:inline-flex; align-items:center; gap:8px; font-size:14px; }
-      .ck input{ width:18px; height:18px; accent-color:#00e5ff; }
+      .ck{ display:inline-flex; align-items:center; gap:8px; font-size:14px; color:#0b1220; font-weight:700; }
+      .ck input{ width:18px; height:18px; accent-color:#6366f1; }
+
       .btn-clear{
-        margin-left:auto; background:transparent; color:#9adfff; font-weight:700;
-        border:1px solid rgba(154,223,255,.4); border-radius:10px; padding:8px 12px; cursor:pointer;
+        margin-left:auto; background:linear-gradient(135deg,#6366f1,#06b6d4); color:#fff; font-weight:900;
+        border:0; border-radius:12px; padding:9px 14px; cursor:pointer;
+        box-shadow:0 8px 22px rgba(37,99,235,.25);
       }
-      .btn-clear:hover{ background:rgba(154,223,255,.08) }
+      .btn-clear:hover{ filter:saturate(1.05); box-shadow:0 10px 26px rgba(37,99,235,.32); }
 
       /* Lưới 4 cột giống Home */
       .grid4{

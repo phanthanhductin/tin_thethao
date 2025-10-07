@@ -13,9 +13,10 @@ export default function Checkout({ setCart }) {
   const [form, setForm] = useState({
     customer_name: "",
     phone: "",
-    email: "",       // ✅ thêm email
+    email: "",
     address: "",
-    payment_method: "COD",
+    note: "",
+    payment_method: "MoMo_QR", // COD | Bank | MoMo_QR | MoMo_CARD
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -27,54 +28,102 @@ export default function Checkout({ setCart }) {
     setForm((s) => ({ ...s, [name]: value }));
   };
 
+  async function placeOrderCODorBank() {
+    const res = await fetch(`${API_BASE}/api/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+      },
+      body: JSON.stringify({
+        ...form,
+        items: cart,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      const orderCode =
+        data?.code ||
+        data?.order_code ||
+        data?.order?.code ||
+        data?.order_id ||
+        data?.id;
+
+      alert("✅ Đặt hàng thành công!" + (orderCode ? " Mã đơn: " + orderCode : ""));
+      if (orderCode) localStorage.setItem("last_order_code", String(orderCode));
+
+      // xóa giỏ (state + localStorage tuỳ app bạn)
+      setCart([]);
+      localStorage.setItem("cart", "[]");
+
+      if (orderCode) {
+        navigate(`/track?code=${encodeURIComponent(orderCode)}`, { replace: true });
+      } else {
+        navigate("/track", { replace: true });
+      }
+    } else {
+      throw new Error(data?.message || "Có lỗi xảy ra.");
+    }
+  }
+
+  async function createMoMoSession() {
+    const momo_type = form.payment_method === "MoMo_CARD" ? "card" : "qr";
+
+    const res = await fetch(`${API_BASE}/api/payments/momo/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+      },
+      body: JSON.stringify({
+        name: form.customer_name,
+        phone: form.phone,
+        email: form.email,
+        address: form.address,
+        note: form.note,
+        amount: total,
+        items: cart,
+        momo_type, // 👈 gửi loại QR/card về BE
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.message || "Không tạo được phiên thanh toán MoMo.");
+
+    // 👇 Lưu thông tin để xử lý khi quay về
+    const moOrderCode = data?.momo?.orderId || data?.orderId;
+    const orderId = data?.order_id;
+    if (moOrderCode) localStorage.setItem("momo_last_order_code", moOrderCode);
+    if (orderId) localStorage.setItem("momo_last_order_id", String(orderId));
+    localStorage.setItem("cart_backup", JSON.stringify(cart)); // phòng khi fail thì khôi phục
+
+    const payUrl = data?.momo?.payUrl || data?.payUrl || data?.momo?.deeplink;
+    if (!payUrl) throw new Error("Thiếu payUrl từ MoMo.");
+
+    window.location.href = payUrl;
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (cart.length === 0) return setError("Giỏ hàng đang trống.");
+    if (!form.customer_name || !form.phone || !form.email || !form.address)
+      return setError("Vui lòng điền đầy đủ thông tin giao hàng.");
+
     setLoading(true);
     setError("");
 
     try {
-      const res = await fetch(`${API_BASE}/api/checkout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-        body: JSON.stringify({
-          ...form,
-          items: cart, // ✅ gửi giỏ hàng nhận được từ Cart.jsx
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        // 🔑 Lấy mã đơn theo nhiều khả năng trả về của API
-        const orderCode =
-          data?.code ||
-          data?.order_code ||
-          data?.order?.code ||
-          data?.order_id ||
-          data?.id;
-
-        // (tuỳ bạn muốn giữ alert hay không)
-        alert("✅ Đặt hàng thành công!" + (orderCode ? " Mã đơn: " + orderCode : ""));
-
-        // Lưu để tự điền ở trang /track lần sau
-        if (orderCode) localStorage.setItem("last_order_code", String(orderCode));
-
-        // Xoá giỏ & điều hướng sang trang Theo dõi
-        setCart([]);
-        if (orderCode) {
-          navigate(`/track?code=${encodeURIComponent(orderCode)}`, { replace: true });
-        } else {
-          navigate("/track", { replace: true });
-        }
+      if (form.payment_method.startsWith("MoMo")) {
+        await createMoMoSession(); // ✅ cả QR & Card đều đi lối này
       } else {
-        setError(data.message || "Có lỗi xảy ra.");
+        await placeOrderCODorBank();
       }
     } catch (err) {
-      setError("Không thể kết nối máy chủ.");
+      setError(err?.message || "Không thể kết nối máy chủ.");
     } finally {
       setLoading(false);
     }
@@ -84,7 +133,6 @@ export default function Checkout({ setCart }) {
     <div style={{ maxWidth: 800, margin: "30px auto", padding: 20 }}>
       <h2 style={{ marginBottom: 20, color: "#388e3c" }}>🧾 Thanh toán</h2>
 
-      {/* nếu giỏ hàng trống */}
       {cart.length === 0 ? (
         <p>⚠️ Giỏ hàng của bạn đang trống, vui lòng quay lại chọn sản phẩm.</p>
       ) : (
@@ -145,7 +193,6 @@ export default function Checkout({ setCart }) {
                 />
               </div>
 
-              {/* ✅ Thêm Email */}
               <div style={{ marginBottom: 12 }}>
                 <label>Email</label>
                 <input
@@ -170,6 +217,17 @@ export default function Checkout({ setCart }) {
                 />
               </div>
 
+              <div style={{ marginBottom: 12 }}>
+                <label>Ghi chú (tuỳ chọn)</label>
+                <textarea
+                  name="note"
+                  value={form.note}
+                  onChange={handleChange}
+                  rows={2}
+                  style={{ width: "100%", padding: 10 }}
+                />
+              </div>
+
               <div style={{ marginBottom: 20 }}>
                 <label>Phương thức thanh toán</label>
                 <select
@@ -179,8 +237,14 @@ export default function Checkout({ setCart }) {
                   style={{ width: "100%", padding: 10 }}
                 >
                   <option value="COD">Thanh toán khi nhận hàng</option>
-                  <option value="Bank">Chuyển khoản ngân hàng</option>
+                  <option value="MoMo_QR">MoMo (QR)</option>
+                  <option value="MoMo_CARD">MoMo (Thẻ/ATM)</option>
                 </select>
+                {form.payment_method.startsWith("MoMo") && (
+                  <p style={{ fontSize: 12, color: "#555", marginTop: 6 }}>
+                    Bạn sẽ được chuyển sang cổng MoMo để thanh toán an toàn.
+                  </p>
+                )}
               </div>
 
               <button
@@ -198,7 +262,11 @@ export default function Checkout({ setCart }) {
                   cursor: "pointer",
                 }}
               >
-                {loading ? "⏳ Đang xử lý..." : "✅ Xác nhận đặt hàng"}
+                {loading
+                  ? "⏳ Đang xử lý..."
+                  : form.payment_method.startsWith("MoMo")
+                    ? "🟣 Thanh toán với MoMo"
+                    : "✅ Xác nhận đặt hàng"}
               </button>
             </form>
 
