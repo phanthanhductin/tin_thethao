@@ -2,17 +2,17 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 
 export default function MainNav({
-    stickBelowTop = true,
-    routes = {
-        home: "/",
-        products: "/products",
-        news: "/news",
-        contact: "/contact",
-    },
+  stickBelowTop = true,
+  routes = {
+    home: "/",
+    products: "/products",
+    news: "/news",
+    contact: "/contact",
+  },
 }) {
-    return (
-        <nav className={`main-nav ${stickBelowTop ? "under-topbar" : ""}`}>
-            <style>{`
+  return (
+    <nav className={`main-nav ${stickBelowTop ? "under-topbar" : ""}`}>
+      <style>{`
         /* ---- GIỮ ĐỒNG BỘ VỚI TopBarAuth: --topbar-h:64px ---- */
         .main-nav{
           --topbar-h:64px;
@@ -56,22 +56,23 @@ export default function MainNav({
         .main-nav.under-topbar{position:sticky; top:var(--topbar-h); z-index:40;}
       `}</style>
 
-            <div className="mn">
-                <div className="mn-wrap mn-row">
-                    <ul className="mn-menu">
-                        <li><NavLink to={routes.home} end>Trang chủ</NavLink></li>
-                        <li><NavLink to={routes.products}>Sản phẩm</NavLink></li>
-                        <li>
-                            <NavLink to="/about">Giới Thiệu</NavLink>
-                        </li>
-                        <li><NavLink to="/news">Tin tức</NavLink></li>
-                        <li><NavLink to={routes.contact}>Liên hệ</NavLink></li>
-                    </ul>
-                    <div className="mn-hotline">
-                        Hotline:&nbsp;<span style={{ color: "#bde9e3" }}>1900 8386</span>
-                    </div>
-                </div>
-            </div>
-        </nav>
-    );
+      <div className="mn">
+        <div className="mn-wrap mn-row">
+          <ul className="mn-menu">
+            <li><NavLink to={routes.home} end>Trang chủ</NavLink></li>
+            <li><NavLink to={routes.products}>Sản phẩm</NavLink></li>
+            <li>
+              <NavLink to="/about">Giới Thiệu</NavLink>
+            </li>
+            <li><NavLink to="/news">Tin tức</NavLink></li>
+            <li><NavLink to={routes.contact}>Liên hệ</NavLink></li>
+            
+          </ul>
+          <div className="mn-hotline">
+            Hotline:&nbsp;<span style={{ color: "#bde9e3" }}>1900 8386</span>
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
 }

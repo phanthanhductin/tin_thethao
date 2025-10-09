@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use App\Models\Contact;
 
 class ContactController extends Controller
@@ -52,7 +53,9 @@ class ContactController extends Controller
     public function adminIndex(Request $r)
     {
         $q = Contact::query()->select([
-            'id','name','email','phone','title','content',
+            'id','name','email','phone',
+            DB::raw('title   as subject'),
+            DB::raw('content as message'),
             'reply_content','status','created_at','updated_at'
         ]);
 
@@ -62,18 +65,21 @@ class ContactController extends Controller
                 $qq->where('name', 'like', "%{$safe}%")
                    ->orWhere('email','like', "%{$safe}%")
                    ->orWhere('phone','like', "%{$safe}%")
-                   ->orWhere('title','like', "%{$safe}%");
+                   ->orWhere('title','like', "%{$safe}%")
+                   ->orWhere('content','like', "%{$safe}%");
             });
         }
+
         if ($r->filled('status')) {
             $q->where('status', (int)$r->status); // 0/1
         }
 
         $q->orderByDesc('created_at');
-        $per = min(max((int)$r->get('per_page', 20), 1), 100);
-        $page= max((int)$r->get('page', 1), 1);
+        $per  = min(max((int)$r->get('per_page', 20), 1), 200);
+        $page = max((int)$r->get('page', 1), 1);
 
         $p = $q->paginate($per, ['*'], 'page', $page);
+
         return response()->json([
             'data'         => $p->items(),
             'current_page' => $p->currentPage(),
@@ -83,31 +89,41 @@ class ContactController extends Controller
         ]);
     }
 
-    /** --------- ADMIN: Detail (đồng thời đánh dấu đã đọc nếu muốn) --------- */
+    /** --------- ADMIN: Detail --------- */
     public function adminShow($id)
     {
-        $c = Contact::findOrFail((int)$id);
-        // Nếu bạn có cột read_at thì có thể set ở đây.
+        $c = Contact::select([
+            'id','name','email','phone',
+            DB::raw('title   as subject'),
+            DB::raw('content as message'),
+            'reply_content','status','created_at','updated_at'
+        ])->findOrFail((int)$id);
+
+        // Nếu có cột read_at: $c->read_at = now(); $c->save();
         return response()->json($c);
     }
 
-    /** --------- ADMIN: Cập nhật trạng thái/ghi chú trả lời --------- */
+    /** --------- ADMIN: Cập nhật trạng thái/note (POST/PUT/PATCH đều vào đây) --------- */
     public function adminUpdate(Request $r, $id)
     {
         $c = Contact::findOrFail((int)$id);
 
-        $data = $r->validate([
-            'status'        => 'nullable|integer|in:0,1', // 0=mới,1=đã xử lý
+        // Hỗ trợ cả FormData lẫn JSON
+        $status = $r->has('status') ? $r->input('status') : null;
+        $reply  = $r->has('reply_content') ? $r->input('reply_content') : $r->input('note'); // FE có thể gửi "note"
+
+        $r->validate([
+            'status'        => 'nullable|integer|in:0,1',
             'reply_content' => 'nullable|string|max:5000',
+            'note'          => 'nullable|string|max:5000',
         ]);
 
-        if (array_key_exists('status',$data))        $c->status = (int)$data['status'];
-        if (array_key_exists('reply_content',$data)) $c->reply_content = $data['reply_content'];
+        if ($status !== null) $c->status = (int)$status;
+        if ($reply !== null)  $c->reply_content = (string)$reply;
 
-        // Cập nhật dấu vết
         $c->updated_by = auth()->id() ?? 0;
-
         $c->save();
+
         return response()->json($c);
     }
 
@@ -117,4 +133,15 @@ class ContactController extends Controller
         Contact::findOrFail((int)$id)->delete();
         return response()->json(['message' => 'deleted']);
     }
+
+    /* ====== Ánh xạ cho apiResource (giữ nguyên resource hiện có) ====== */
+
+    // GET /api/admin/contacts (apiResource -> index) → dùng adminIndex
+    public function index(Request $r) { return $this->adminIndex($r); }
+
+    // GET /api/admin/contacts/{id} (apiResource -> show) → dùng adminShow
+    public function show($id) { return $this->adminShow($id); }
+
+    // PUT/PATCH /api/admin/contacts/{id} (apiResource -> update) → dùng adminUpdate
+    public function update(Request $r, $id) { return $this->adminUpdate($r, $id); }
 }

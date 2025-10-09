@@ -35,4 +35,16 @@ return [
         ],
     ],
 
+    'ollama' => [
+    'base_url' => env('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
+    'model'    => env('OLLAMA_MODEL', 'llama3.1:8b'),
+],
+
+ 'shop' => [
+        'name'    => env('SHOP_NAME', 'SportShop'),
+        'front'   => env('SHOP_FRONTEND_URL', 'http://localhost:5173'),
+        'address' => env('SHOP_ADDRESS', ''),
+        'phone'   => env('SHOP_PHONE', ''),
+    ],
+
 ];

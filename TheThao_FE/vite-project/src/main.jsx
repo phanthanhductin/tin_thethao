@@ -303,6 +303,10 @@ import AdminPostAdd from "./pages/Admin/Post/add.jsx";
 import AdminPostEdit from "./pages/Admin/Post/edit.jsx";
 import AdminContacts from "./pages/Admin/Contact/Contacts.jsx";
 import TrashProducts from "./pages/Admin/Product/TrashProducts.jsx";
+import StockMovements from "./pages/Admin/StockMovements";
+// import Assistant from "./pages/Customers/Assistant";
+import FloatingAIWidget from "./components/FloatingAIWidget";
+
 /* =============================
    🧩 CUSTOMER LAYOUT GẮN TRỰC TIẾP TẠI ĐÂY
    ============================= */
@@ -460,6 +464,7 @@ function CustomerLayout() {
           <NavLink to="/contact" className="navlink">
             Liên hệ
           </NavLink>
+          {/* <NavLink to="/assistant" className="navlink">AI</NavLink> */}
         </nav>
 
         <div className="right">
@@ -624,14 +629,21 @@ function App() {
         <Route path="/news/:slugOrId" element={<NewsDetail />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/momo-return" element={<MomoReturn />} />
-<Route path="/admin/categories/trash" element={<CategoryTrash />} />
+        <Route path="/admin/categories/trash" element={<CategoryTrash />} />
+        {/* các route khác */}
+        {/* <Route path="/assistant" element={<Assistant />} /> */}
 
 
         <Route path="/products/:id/reviews" element={<ReviewSection />} />
-<Route path="/canceled-orders" element={<CanceledOrders />} />
+        <Route path="/canceled-orders" element={<CanceledOrders />} />
         <Route path="/my-orders" element={<MyOrders />} />
 
       </Route>
+
+
+
+
+
 
       {/* ADMIN */}
       <Route path="/admin/login" element={<AdminLogin />} />
@@ -658,7 +670,8 @@ function App() {
         <Route path="posts/edit/:id" element={<AdminPostEdit />} />
         <Route path="contacts" element={<AdminContacts />} />
       </Route>
-<Route path="/admin/products/trash" element={<TrashProducts />} />
+      <Route path="/admin/products/trash" element={<TrashProducts />} />
+      <Route path="/admin/stock-movements" element={<StockMovements />} />
 
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route element={<CustomerLayout />}>
@@ -667,9 +680,10 @@ function App() {
     </Routes>
   );
 }
-
 ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
     <App />
+    {/* 👇 Nút tròn AI nổi toàn site */}
+    <FloatingAIWidget />
   </BrowserRouter>
 );

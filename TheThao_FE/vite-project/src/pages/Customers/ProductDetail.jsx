@@ -718,8 +718,6 @@
 //     </div>
 //   );
 // }
-
-
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 
@@ -739,32 +737,29 @@ export default function ProductDetail({ addToCart }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  // Coupons
   const [coupons, setCoupons] = useState([]);
   const [savingCode, setSavingCode] = useState("");
 
-  // Reviews
   const [reviews, setReviews] = useState([]);
   const [canReview, setCanReview] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [rev, setRev] = useState({ rating: 5, content: "" });
 
-  // Quantity
   const [qty, setQty] = useState(1);
 
-  // Toast message
   const [toast, setToast] = useState(null);
   const showToast = (msg, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 1800);
   };
 
-  // ---------- Helpers ----------
   const getThumb = (p) =>
     p?.thumbnail_url || p?.thumbnail || p?.image_url || PLACEHOLDER;
 
   const priceRoot = (p) => Number(p?.price_root ?? p?.price ?? 0);
   const priceSale = (p) => Number(p?.price_sale ?? 0);
+  const effectivePrice = (p) =>
+    priceSale(p) > 0 && priceSale(p) < priceRoot(p) ? priceSale(p) : priceRoot(p);
 
   const discount = useMemo(() => {
     const r = priceRoot(product);
@@ -775,13 +770,25 @@ export default function ProductDetail({ addToCart }) {
     return 0;
   }, [product]);
 
+  // ✅ Tồn kho: lấy từ API (ProductController@show đã trả qty)
+  const stock = Number(product?.qty ?? 0);
+  const outOfStock = stock <= 0;
+
   const pushToCart = (item) => {
+    if (outOfStock) {
+      showToast("Sản phẩm đã hết hàng.", false);
+      return;
+    }
+    if (item.qty > stock) {
+      showToast(`Chỉ còn ${stock} sản phẩm trong kho.`, false);
+      return;
+    }
+
     if (addToCart) {
       addToCart(item);
       showToast("🛒 Đã thêm vào giỏ!", true);
       return;
     }
-    // fallback: localStorage cart
     const load = () => {
       try {
         return JSON.parse(localStorage.getItem("cart") || "[]");
@@ -792,14 +799,14 @@ export default function ProductDetail({ addToCart }) {
     const save = (v) => localStorage.setItem("cart", JSON.stringify(v));
     const cart = load();
     const idx = cart.findIndex((x) => x.id === item.id);
-    if (idx >= 0) cart[idx].qty += item.qty;
+    if (idx >= 0) cart[idx].qty = Math.min(stock, cart[idx].qty + item.qty);
     else cart.push(item);
     save(cart);
     showToast("🛒 Đã thêm vào giỏ!", true);
     navigate("/cart");
   };
 
-  // ---------- Fetch product (+fallback nếu BE không để /api) ----------
+  // ---------- Fetch product + related ----------
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
@@ -807,7 +814,6 @@ export default function ProductDetail({ addToCart }) {
         setLoading(true);
         setErr("");
 
-        // 1) thử /api
         let p = null;
         try {
           const r = await fetch(`${API}/products/${id}`, { signal: ac.signal });
@@ -817,7 +823,6 @@ export default function ProductDetail({ addToCart }) {
           }
         } catch {}
 
-        // 2) fallback /products
         if (!p) {
           const r2 = await fetch(`${ALT}/products/${id}`, { signal: ac.signal });
           if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
@@ -827,16 +832,23 @@ export default function ProductDetail({ addToCart }) {
 
         setProduct(p);
 
-        // related (nếu có API)
-        try {
-          const rc = await fetch(`${API}/categories/${p.category_id}/products`, {
-            signal: ac.signal,
-          });
-          if (rc.ok) {
-            const dd = await rc.json();
-            setRelated(Array.isArray(dd) ? dd : dd.data ?? []);
+        // Related theo category
+        if (p?.category_id) {
+          try {
+            const rc = await fetch(`${API}/categories/${p.category_id}/products`, {
+              signal: ac.signal,
+            });
+            if (rc.ok) {
+              const dd = await rc.json();
+              const list = Array.isArray(dd) ? dd : dd.data ?? [];
+              setRelated(list.filter(it => it.id !== Number(id)).slice(0, 8));
+            } else {
+              setRelated([]);
+            }
+          } catch {
+            setRelated([]);
           }
-        } catch {
+        } else {
           setRelated([]);
         }
       } catch (e) {
@@ -849,7 +861,7 @@ export default function ProductDetail({ addToCart }) {
     return () => ac.abort();
   }, [id]);
 
-  // ---------- Fetch coupons theo product ----------
+  // ---------- Fetch coupons ----------
   useEffect(() => {
     if (!id) return;
     const ac = new AbortController();
@@ -871,41 +883,14 @@ export default function ProductDetail({ addToCart }) {
     return () => ac.abort();
   }, [id]);
 
-  // ---------- Lưu mã ----------
-  const saveCoupon = async (code) => {
-    if (!token) {
-      showToast("Vui lòng đăng nhập để lưu mã.", false);
-      return;
-    }
-    try {
-      setSavingCode(code);
-      const r = await fetch(`${API}/coupons/${encodeURIComponent(code)}/save`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.message || "Lưu mã thành công");
-      showToast("Đã lưu mã: " + code, true);
-    } catch (e) {
-      showToast(e.message || "Lưu mã thành công", false);
-    } finally {
-      setSavingCode("");
-    }
-  };
-
-  // ---------- Reviews + quyền review ----------
+  // ---------- Reviews ----------
   useEffect(() => {
     const ac = new AbortController();
-    // list
     fetch(`${API}/products/${id}/reviews`, { signal: ac.signal })
       .then((r) => r.json())
       .then((d) => setReviews(Array.isArray(d) ? d : d.data ?? []))
       .catch(() => setReviews([]));
 
-    // can review
     if (token) {
       fetch(`${API}/products/${id}/can-review`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -916,13 +901,10 @@ export default function ProductDetail({ addToCart }) {
         .catch(() => setCanReview(false));
     } else setCanReview(false);
 
-    // mở form nếu có ?review=1
     if (new URLSearchParams(location.search).get("review")) setShowForm(true);
-
     return () => ac.abort();
   }, [id, token, location.search]);
 
-  // ---------- Submit review ----------
   const submitReview = async (e) => {
     e.preventDefault();
     if (!token) {
@@ -942,7 +924,6 @@ export default function ProductDetail({ addToCart }) {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
-      // reload list
       const lst = await fetch(`${API}/products/${id}/reviews`).then((r) =>
         r.json()
       );
@@ -960,7 +941,6 @@ export default function ProductDetail({ addToCart }) {
   if (err) return <div style={{ padding: 16, color: "#d32f2f" }}>{err}</div>;
   if (!product) return <div style={{ padding: 16 }}>Không tìm thấy sản phẩm.</div>;
 
-  // ====== Helper hiển thị text mã
   const couponText = (c) => {
     const head =
       c.type === "percent"
@@ -971,173 +951,79 @@ export default function ProductDetail({ addToCart }) {
     return head + cap + min;
   };
 
-  // ====== Styles (pastel xanh + hồng, font đẹp, nút +/- đẹp)
-  const styles = `
-  /* Google Fonts */
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Poppins:wght@600;800;900&display=swap');
-
-  :root{
-    --pink-50:#fff5fa;  --pink-100:#ffe8f2; --pink-200:#ffd6e7; --pink-300:#fbcfe8; --pink-400:#f9a8d4;
-    --green-50:#f4fff9; --green-100:#eafff3; --green-200:#dffceb; --green-300:#bbf7d0; --green-400:#86efac;
-    --ink:#0f172a; --muted:#64748b; --line:#e5e7eb; --card:#ffffff;
-  }
-
-  .pd-page{
-    width:100%; padding:16px 24px; box-sizing:border-box;
-    background:linear-gradient(180deg,var(--pink-50),var(--green-50));
-    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  }
-
-  .pd-card{
-    width:100%;
-    display:grid; grid-template-columns:minmax(320px,520px) 1fr; gap:24px;
-    background:var(--card); border:1px solid #f1f5f9; border-radius:16px;
-    box-shadow:0 14px 34px rgba(2,6,23,.06); padding:20px;
-    border-image: linear-gradient(90deg, var(--pink-200), var(--green-200)) 1;
-  }
-
-  .pd-hero{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;
-    aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;}
-  .pd-hero img{width:100%;height:100%;object-fit:cover;image-rendering:-webkit-optimize-contrast;}
-
-  /* Title gradient + Poppins */
-  .pd-title{
-    font-family: Poppins, Inter, sans-serif;
-    font-size:28px; font-weight:900; margin:0 0 8px;
-    background:linear-gradient(90deg,var(--pink-400),var(--green-400));
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-    letter-spacing:.2px;
-  }
-
-  .pd-prices{display:flex;align-items:center;gap:10px;margin:6px 0 8px}
-  .pd-price-now{font-size:30px;font-weight:900;color:#111;text-shadow:0 1px 0 #fff;}
-  .pd-price-old{color:var(--muted);text-decoration:line-through}
-  .pd-badge-off{
-    background:var(--pink-100); color:#be185d; font-weight:800;
-    padding:2px 10px;border-radius:999px;font-size:12px;border:1px dashed var(--pink-300);
-  }
-
-  .pd-desc{color:#334155;line-height:1.65;margin:8px 0 12px}
-
-  /* Qty */
-  .pd-qty{display:flex;align-items:center;gap:12px;margin:12px 0}
-  .pd-qty .label{font-weight:800;color:var(--ink)}
-  .pd-qty .ctrl{
-    display:flex;align-items:center;border:1px solid var(--pink-300);
-    border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(249,168,212,.12);
-  }
-  .pd-qty button{
-    width:42px;height:42px;border:0;cursor:pointer;font-weight:900;font-size:20px;line-height:1;
-    background:linear-gradient(135deg,var(--pink-300),var(--green-300));
-    color:#0b1220;border-right:1px solid var(--pink-200);
-    transition:transform .06s ease, filter .15s ease;
-  }
-  .pd-qty button:last-child{border-right:0;border-left:1px solid var(--pink-200)}
-  .pd-qty button:hover{filter:saturate(1.08)}
-  .pd-qty button:active{transform:translateY(1px)}
-  .pd-qty input{
-    width:70px;height:42px;border:0;text-align:center;font-weight:800;color:var(--ink);
-    font-family: Inter, system-ui, sans-serif; letter-spacing:.4px;
-  }
-
-  .pd-actions{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
-  .pd-btn-primary{
-    padding:12px 18px;border-radius:12px;border:0;cursor:pointer;
-    background:linear-gradient(135deg, var(--pink-300), var(--green-300));
-    color:#0b1220;font-weight:900;
-    box-shadow:0 10px 24px rgba(244,114,182,.18), 0 6px 20px rgba(134,239,172,.18);
-    transition:transform .06s ease, filter .15s ease;
-  }
-  .pd-btn-primary:hover{filter:saturate(1.05)}
-  .pd-btn-primary:active{transform:translateY(1px)}
-  .pd-btn-ghost{
-    padding:12px 16px;border-radius:12px;border:1px solid var(--pink-200);
-    background:#fff;font-weight:800;color:#9d174d;
-  }
-
-  /* Coupons (full width, grid) */
-  .pd-coupons{margin:16px 0 8px;width:100%}
-  .pd-c-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-  .pd-c-title{
-    font-weight:900;color:#9d174d;
-    background:linear-gradient(90deg,var(--pink-100),var(--green-100));
-    border:1px solid var(--pink-200);padding:6px 12px;border-radius:12px
-  }
-  .pd-c-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-  .pd-c-item{
-    border:1px dashed var(--pink-300);background:#fff;border-radius:12px;padding:10px;
-    box-shadow:0 6px 18px rgba(244,114,182,.08);
-  }
-  .pd-c-item h5{font-size:12px;color:var(--muted);margin:0}
-  .pd-c-item .code{font-weight:900;letter-spacing:.6px;margin:2px 0 4px;color:#be185d}
-  .pd-c-item .desc{font-size:12px;color:var(--ink)}
-  .pd-c-item .save{
-    margin-top:8px;padding:6px 10px;border-radius:10px;border:1px solid var(--green-300);
-    background:linear-gradient(90deg,#fff,var(--green-100));color:#065f46;font-weight:800;cursor:pointer;
-  }
-  .pd-c-item .save[disabled]{opacity:.7;cursor:not-allowed}
-
-  /* Related */
-  .pd-rel{margin-top:14px}
-  .pd-rel h3{
-    font-family:Poppins, Inter, sans-serif;font-weight:800;margin:0 0 8px;
-    background:linear-gradient(90deg,var(--pink-300),var(--green-300));
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .pd-rel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
-  .pd-card-rel{display:block;text-decoration:none;color:var(--ink);background:#fff;border:1px solid #f1f5f9;border-radius:12px;padding:10px;transition:box-shadow .15s ease, transform .06s ease;}
-  .pd-card-rel:hover{box-shadow:0 10px 20px rgba(2,6,23,.06);transform:translateY(-1px)}
-  .pd-rel-img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;image-rendering:-webkit-optimize-contrast;}
-  .pd-rel-name{font-weight:800;margin-top:6px;min-height:44px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .pd-rel-price{color:var(--ink);font-weight:900}
-
-  /* Reviews */
-  .pd-rev{margin-top:20px}
-  .pd-rev h3{
-    font-family:Poppins, Inter, sans-serif;font-size:18px;font-weight:800;margin:0 0 8px;
-    background:linear-gradient(90deg,var(--pink-300),var(--green-300));
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .pd-rev .write{padding:8px 12px;border-radius:12px;border:1px solid var(--green-300);background:var(--green-100);font-weight:800;cursor:pointer}
-  .pd-rev form{margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff}
-  .pd-rev label{font-weight:800;display:block;margin:10px 0 6px}
-  .pd-rev select, .pd-rev textarea{padding:8px 10px;border-radius:10px;border:1px solid #cbd5e1;width:100%}
-  .pd-rev .controls{margin-top:10px;display:flex;gap:8px}
-  .pd-rev .submit{padding:8px 12px;border-radius:12px;border:0;background:#60a5fa;color:#fff;font-weight:900;cursor:pointer}
-  .pd-rev .cancel{padding:8px 12px;border-radius:12px;border:1px solid var(--line);background:#fff;font-weight:800;cursor:pointer}
-  .pd-rev .item{background:#fff;border:1px solid #f1f5f9;border-radius:12px;padding:10px}
-  .pd-stars{color:#f59e0b}
-  .pd-muted{color:#64748b}
-
-  /* Toast */
-  .pd-toast{
-    position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;
-    padding:10px 14px;border-radius:12px;border:1px solid var(--green-300);
-    background:var(--green-100);color:#065f46;font-weight:800;
-    box-shadow:0 10px 24px rgba(16,185,129,.18)
-  }
-  .pd-toast.error{border-color:#fca5a5;background:var(--pink-100);color:#b91c1c;box-shadow:0 10px 24px rgba(239,68,68,.18)}
-
-  @media (max-width: 920px){
-    .pd-card{grid-template-columns:1fr}
-    .pd-hero{aspect-ratio:auto}
-  }
-  `;
-
-  // Handlers qty
   const dec = () => setQty((q) => Math.max(1, Number(q) - 1));
-  const inc = () => setQty((q) => Math.min(99, Number(q) + 1));
+
+  // ✅ Tồn kho: giới hạn tăng số lượng theo stock
+  const inc = () => setQty((q) => {
+    const next = Number(q) + 1;
+    if (outOfStock) return 1;
+    return Math.min(stock, Math.min(99, next));
+  });
+
+  // ✅ Tồn kho: giới hạn nhập tay
   const onQtyInput = (e) => {
     const v = e.target.value.replace(/\D/g, "");
-    const n = Math.max(1, Math.min(99, Number(v || 1)));
+    let n = Math.max(1, Math.min(99, Number(v || 1)));
+    if (!outOfStock) n = Math.min(n, stock);
     setQty(n);
   };
+
+  // ✅ CSS thêm nhãn tồn kho
+  const styles = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Poppins:wght@600;800;900&display=swap');
+  :root{
+    --pink-300:#fbcfe8; --green-300:#bbf7d0;
+    --pink-100:#ffe8f2; --green-100:#eafff3;
+    --ink:#0f172a; --muted:#64748b; --line:#e5e7eb;
+  }
+  .pd-page{padding:16px 24px;background:linear-gradient(180deg,#fff5fa,#f4fff9);font-family:Inter,sans-serif;}
+  .pd-card{display:grid;grid-template-columns:minmax(300px,520px)1fr;gap:24px;background:#fff;border:1px solid #f1f5f9;border-radius:16px;box-shadow:0 14px 34px rgba(2,6,23,.06);padding:20px;}
+  .pd-hero img{width:100%;height:100%;object-fit:cover;border-radius:12px;}
+  .pd-title{font-family:Poppins,sans-serif;font-weight:900;font-size:28px;background:linear-gradient(90deg,var(--pink-300),var(--green-300));-webkit-background-clip:text;color:transparent;margin:0 0 8px;}
+  .pd-meta{color:#475569; margin:4px 0 10px}
+  .pd-meta a{color:#2563eb; text-decoration:none}
+  .pd-prices{display:flex;align-items:center;gap:8px}
+  .pd-price-now{font-size:28px;font-weight:900;color:#111}
+  .pd-price-old{text-decoration:line-through;color:var(--muted)}
+  .pd-badge-off{background:var(--pink-100);color:#be185d;font-weight:800;padding:2px 8px;border-radius:999px;font-size:12px;border:1px dashed var(--pink-300);}
+  .pd-desc{color:#334155;line-height:1.6;margin:8px 0 12px}
+  .pd-desc strong{font-weight:bold;color:#111;}
+  .pd-desc em{font-style:italic;}
+  .pd-desc p{margin-bottom:6px;}
+  .pd-qty{display:flex;align-items:center;gap:12px;margin:12px 0}
+  .pd-actions{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .pd-btn-primary{padding:12px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--pink-300),var(--green-300));font-weight:900;cursor:pointer}
+  .pd-btn-ghost{padding:12px 16px;border:1px solid var(--pink-300);border-radius:12px;background:#fff;font-weight:800;color:#9d174d}
+  .stock{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-weight:800;font-size:12px;border:1px dashed #d1d5db;background:#f8fafc;color:#0f172a}
+  .stock.low{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+  .stock.out{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+
+  /* Related */
+  .rel-wrap{margin-top:22px}
+  .rel-title{font-weight:800; font-size:20px; margin:6px 0 12px}
+  .rel-grid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px}
+  .rel-card{background:#fff;border:1px solid #f1f5f9;border-radius:12px; overflow:hidden}
+  .rel-card img{width:100%; height:150px; object-fit:cover}
+  .rel-body{padding:10px}
+  .rel-name{font-weight:700; font-size:14px; color:#0f172a; margin:0 0 4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+  .rel-price{font-weight:800}
+
+  /* Reviews */
+  .rv-wrap{margin-top:24px; background:#fff; border:1px solid #eef2f7; border-radius:12px; padding:16px}
+  .rv-title{font-weight:800; font-size:20px; margin-bottom:10px}
+  .rv-item{border-top:1px dashed #e5e7eb; padding:10px 0}
+  .rv-stars{color:#f59e0b; font-size:14px; margin-right:6px}
+  .rv-meta{color:#64748b; font-size:12px}
+  .rv-form{margin-top:12px; display:grid; gap:8px}
+  .rv-form textarea{min-height:90px; padding:10px; border:1px solid #e2e8f0; border-radius:8px}
+  .rv-form button{align-self:start; padding:10px 14px; border:0; border-radius:10px; background:#111; color:#fff; font-weight:800}
+  `;
 
   return (
     <div className="pd-page">
       <style>{styles}</style>
 
-      {/* Product header (full width) */}
+      {/* ====== Card chi tiết ====== */}
       <div className="pd-card">
         <div className="pd-hero">
           <img
@@ -1150,35 +1036,68 @@ export default function ProductDetail({ addToCart }) {
         <div>
           <h1 className="pd-title">{product?.name}</h1>
 
-          <div className="pd-prices">
-            <div className="pd-price-now">
-              {priceSale(product) > 0 ? (
-                <>₫{VND.format(priceSale(product))}</>
-              ) : (
-                <>₫{VND.format(priceRoot(product))}</>
-              )}
-            </div>
-            {priceSale(product) > 0 && (
+          {/* ✅ Brand & Danh mục */}
+          <div className="pd-meta">
+            {product?.brand_name && (
+              <>Thương hiệu: <b>{product.brand_name}</b> · </>
+            )}
+            {product?.category_id && (
               <>
-                <div className="pd-price-old">
-                  ₫{VND.format(priceRoot(product))}
-                </div>
-                {discount > 0 && <span className="pd-badge-off">-{discount}%</span>}
+                Danh mục:{" "}
+                <Link to={`/category/${product.category_id}`}>Xem danh mục</Link>
               </>
             )}
           </div>
 
-          {/* Mô tả trong card */}
-          <p className="pd-desc">{product?.description || "—"}</p>
-
-          {/* Số lượng */}
-          <div className="pd-qty">
-            <span className="label">Số lượng</span>
-            <div className="ctrl">
-              <button type="button" onClick={dec}>−</button>
-              <input type="text" value={qty} onChange={onQtyInput} inputMode="numeric" />
-              <button type="button" onClick={inc}>+</button>
+          <div className="pd-prices">
+            <div className="pd-price-now">
+              ₫{VND.format(effectivePrice(product))}
             </div>
+            {priceSale(product) > 0 && priceSale(product) < priceRoot(product) && (
+              <>
+                <div className="pd-price-old">
+                  ₫{VND.format(priceRoot(product))}
+                </div>
+                {discount > 0 && (
+                  <span className="pd-badge-off">-{discount}%</span>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ✅ Hiển thị tồn kho */}
+          <div style={{ marginTop: 8, marginBottom: 8 }}>
+            <span className={`stock ${outOfStock ? "out" : stock <= 5 ? "low" : ""}`}>
+              {outOfStock ? "Hết hàng" : `Còn ${VND.format(stock)} sản phẩm`}
+            </span>
+          </div>
+
+          {/* ✅ Mô tả có HTML */}
+          <div
+            className="pd-desc"
+            dangerouslySetInnerHTML={{
+              __html: product?.description || "<em>Không có mô tả</em>",
+            }}
+          ></div>
+
+          {/* ✅ Chi tiết sản phẩm */}
+          {product?.detail && (
+            <div
+              className="pd-desc"
+              dangerouslySetInnerHTML={{ __html: product.detail }}
+            ></div>
+          )}
+
+          {/* Số lượng & hành động */}
+          <div className="pd-qty">
+            <button onClick={dec} style={{ padding: "6px 12px" }} disabled={outOfStock}>−</button>
+            <input
+              value={outOfStock ? 0 : qty}
+              onChange={onQtyInput}
+              disabled={outOfStock}
+              style={{ width: 50, textAlign: "center" }}
+            />
+            <button onClick={inc} style={{ padding: "6px 12px" }} disabled={outOfStock}>+</button>
           </div>
 
           <div className="pd-actions">
@@ -1187,14 +1106,16 @@ export default function ProductDetail({ addToCart }) {
                 pushToCart({
                   id: product.id,
                   name: product.name,
-                  price: priceSale(product) > 0 ? priceSale(product) : priceRoot(product),
-                  qty,
+                  price: effectivePrice(product),
+                  qty: outOfStock ? 0 : qty,
                   thumbnail_url: getThumb(product),
                 })
               }
               className="pd-btn-primary"
+              disabled={outOfStock}
+              title={outOfStock ? "Hết hàng" : "Thêm vào giỏ"}
             >
-              Thêm vào giỏ
+              {outOfStock ? "Hết hàng" : "Thêm vào giỏ"}
             </button>
             <Link to="/" className="pd-btn-ghost">
               ← Tiếp tục mua
@@ -1203,48 +1124,21 @@ export default function ProductDetail({ addToCart }) {
         </div>
       </div>
 
-      {/* ====== SECTION: MÃ GIẢM GIÁ (full width, grid) ====== */}
-      {coupons.length > 0 && (
-        <section className="pd-coupons">
-          <div className="pd-c-head">
-            <div className="pd-c-title">Mã giảm giá</div>
-          </div>
-          <div className="pd-c-list">
-            {coupons.map((c) => (
-              <div key={c.code} className="pd-c-item">
-                <h5>{c.title || "Ưu đãi"}</h5>
-                <div className="code">{c.code}</div>
-                <div className="desc">{couponText(c)}</div>
-                <button
-                  onClick={() => saveCoupon(c.code)}
-                  disabled={savingCode === c.code}
-                  className="save"
-                  title={token ? "Lưu mã vào tài khoản" : "Đăng nhập để lưu mã"}
-                >
-                  {savingCode === c.code ? "Đang lưu..." : "Lưu mã"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Related */}
-      {related.length > 0 && (
-        <div className="pd-rel">
-          <h3>Sản phẩm liên quan</h3>
-          <div className="pd-rel-grid">
-            {related.slice(0, 6).map((p) => (
-              <Link key={p.id} to={`/products/${p.id}`} className="pd-card-rel">
+      {/* ====== Sản phẩm liên quan ====== */}
+      {!!related.length && (
+        <div className="rel-wrap">
+          <div className="rel-title">Sản phẩm liên quan</div>
+          <div className="rel-grid">
+            {related.map((r) => (
+              <Link key={r.id} to={`/product/${r.id}`} className="rel-card">
                 <img
-                  src={getThumb(p)}
+                  src={r.thumbnail_url || r.thumbnail || PLACEHOLDER}
                   onError={(e) => (e.currentTarget.src = PLACEHOLDER)}
-                  alt={p.name}
-                  className="pd-rel-img"
+                  alt={r.name}
                 />
-                <div className="pd-rel-name">{p.name}</div>
-                <div className="pd-rel-price">
-                  ₫{VND.format(Number(p.price_sale ?? p.price_root ?? p.price ?? 0))}
+                <div className="rel-body">
+                  <div className="rel-name">{r.name}</div>
+                  <div className="rel-price">₫{VND.format(Number(r.price ?? r.price_sale ?? 0))}</div>
                 </div>
               </Link>
             ))}
@@ -1252,72 +1146,77 @@ export default function ProductDetail({ addToCart }) {
         </div>
       )}
 
-      {/* Reviews */}
-      <section className="pd-rev">
-        <h3>Đánh giá</h3>
+      {/* ====== Đánh giá ====== */}
+      <div className="rv-wrap">
+        <div className="rv-title">Đánh giá</div>
 
-        {canReview && !showForm && (
-          <button onClick={() => setShowForm(true)} className="write">
-            Viết đánh giá
-          </button>
+        {reviews.length === 0 ? (
+          <div className="rv-item" style={{ borderTop: "0" }}>
+            Chưa có đánh giá nào.
+          </div>
+        ) : (
+          reviews.map((rv) => (
+            <div key={rv.id || rv.created_at} className="rv-item">
+              <span className="rv-stars">{"★".repeat(rv.rating || 5)}</span>
+              <span className="rv-meta">
+                {rv.user_name || "Người dùng"} • {rv.created_at?.slice(0, 10)}
+              </span>
+              <div style={{ marginTop: 4 }}>{rv.content}</div>
+            </div>
+          ))
         )}
 
-        {showForm && (
-          <form onSubmit={submitReview}>
-            <label>Chấm sao</label>
-            <select
-              value={rev.rating}
-              onChange={(e) => setRev((s) => ({ ...s, rating: e.target.value }))}
+        {canReview && (
+          <>
+            <button
+              onClick={() => setShowForm((s) => !s)}
+              style={{ marginTop: 12, padding: "8px 12px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff" }}
             >
-              <option value={5}>★★★★★ (5)</option>
-              <option value={4}>★★★★☆ (4)</option>
-              <option value={3}>★★★☆☆ (3)</option>
-              <option value={2}>★★☆☆☆ (2)</option>
-              <option value={1}>★☆☆☆☆ (1)</option>
-            </select>
+              {showForm ? "Ẩn form đánh giá" : "Viết đánh giá"}
+            </button>
 
-            <label>Nội dung</label>
-            <textarea
-              rows={4}
-              value={rev.content}
-              onChange={(e) => setRev((s) => ({ ...s, content: e.target.value }))}
-              placeholder="Chia sẻ trải nghiệm của bạn…"
-            />
-
-            <div className="controls">
-              <button type="submit" className="submit">Gửi đánh giá</button>
-              <button type="button" onClick={() => setShowForm(false)} className="cancel">
-                Hủy
-              </button>
-            </div>
-          </form>
-        )}
-
-        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-          {reviews.length === 0 && <div className="pd-muted">Chưa có đánh giá.</div>}
-          {reviews.map((r, i) => (
-            <div key={r.id || i} className="item">
-              <div style={{ fontWeight: 900 }}>
-                {r.user?.name || r.author_name || "Ẩn danh"}{" "}
-                <span className="pd-stars">
-                  {"★".repeat(r.rating || 0)}
-                  {"☆".repeat(Math.max(0, 5 - (r.rating || 0)))}
-                </span>
-              </div>
-              <div style={{ color: "#334155", marginTop: 4 }}>{r.content || r.comment}</div>
-              {r.created_at && (
-                <div className="pd-muted" style={{ fontSize: 12, marginTop: 4 }}>
-                  {new Date(r.created_at).toLocaleString("vi-VN")}
+            {showForm && (
+              <form className="rv-form" onSubmit={submitReview}>
+                <div>
+                  <label>Chấm sao: </label>
+                  <select
+                    value={rev.rating}
+                    onChange={(e) => setRev((x) => ({ ...x, rating: e.target.value }))}
+                  >
+                    {[5,4,3,2,1].map((n) => (
+                      <option key={n} value={n}>{n} sao</option>
+                    ))}
+                  </select>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+                <textarea
+                  placeholder="Cảm nhận của bạn…"
+                  value={rev.content}
+                  onChange={(e) => setRev((x) => ({ ...x, content: e.target.value }))}
+                />
+                <button type="submit">Gửi đánh giá</button>
+              </form>
+            )}
+          </>
+        )}
+      </div>
 
-      {/* Toast */}
-      {toast && <div className={`pd-toast ${toast.ok ? "" : "error"}`}>{toast.msg}</div>}
+      {/* Toast nhỏ */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            background: toast.ok ? "#16a34a" : "#dc2626",
+            color: "#fff",
+            padding: "10px 14px",
+            borderRadius: 10,
+            fontWeight: 700,
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
-

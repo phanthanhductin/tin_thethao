@@ -48,10 +48,12 @@ export default function AdminSidebar() {
         <NavLink to="/admin/contacts" style={linkStyle}>
           Quản Lý Liên Hệ
         </NavLink>
-        <NavLink to="/admin/users" style={linkStyle}>
+        {/* <NavLink to="/admin/users" style={linkStyle}>
           Quản Lý Người Dùng
-        </NavLink>
-
+        </NavLink> */}
+        <NavLink to="/admin/stock-movements" style={linkStyle}>
+                  Quản Lý ton kho
+                </NavLink>
 
       </nav>
     </div>
